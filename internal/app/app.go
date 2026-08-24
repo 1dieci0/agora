@@ -35,6 +35,7 @@ func NewApp() (*App, error) {
 	}
 
 	hub := realtime.NewHub()
+	messageRepo := messages.NewRepository(db)
 
 	app := &App{
 		db:       db,
@@ -42,7 +43,7 @@ func NewApp() (*App, error) {
 		users:    users.NewHandler(db),
 		servers:  servers.NewHandler(db),
 		channels: channels.NewHandler(db),
-		messages: messages.NewHandler(db, hub),
+		messages: messages.NewHandler(messageRepo, hub),
 		hub:      hub,
 		realtime: realtime.NewHandler(db, hub),
 	}
@@ -146,5 +147,15 @@ func (app *App) RegisterRoutes() {
 	app.router.HandleFunc(
 		"GET /ws/channels/{channelID}",
 		app.users.RequireAuth(app.realtime.Connect),
+	)
+
+	app.router.HandleFunc(
+		"DELETE /api/messages/{messageID}",
+		app.users.RequireAuth(app.messages.Delete),
+	)
+
+	app.router.HandleFunc(
+		"PATCH /api/messages/{messageID}",
+		app.users.RequireAuth(app.messages.Update),
 	)
 }

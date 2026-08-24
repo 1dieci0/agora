@@ -20,3 +20,7 @@ type MessageResponse struct {
 type MessagesResponse struct {
 	Messages []Message `json:"messages"`
 }
+
+type UpdateMessageRequest struct {
+	Content string `json:"content"`
+}

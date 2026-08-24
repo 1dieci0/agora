@@ -118,8 +118,13 @@ Content-Type: application/json
 
 ###
 
-GET http://localhost:8080/api/users
+GET http://localhost:8080/api/channels/1/messages
 
+###
+
+DELETE http://localhost:8080/api/messages/3
+
+###
 
 ###
 POST http://localhost:8080/api/channels/1/messages
@@ -127,6 +132,14 @@ Content-Type: application/json
 
 {
     "content": "hello websocket!"
+}
+
+###
+PATCH http://localhost:8080/api/messages/4
+Content-Type: application/json
+
+{
+    "content": "AAAAAAAAAAAAAAA"
 }
 
 ###

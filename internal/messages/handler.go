@@ -11,14 +11,14 @@ import (
 )
 
 type Handler struct {
-	db  *sql.DB
-	hub *realtime.Hub
+	repo *Repository
+	hub  *realtime.Hub
 }
 
-func NewHandler(db *sql.DB, hub *realtime.Hub) *Handler {
+func NewHandler(repo *Repository, hub *realtime.Hub) *Handler {
 	return &Handler{
-		db:  db,
-		hub: hub,
+		repo: repo,
+		hub:  hub,
 	}
 }
 
@@ -54,20 +54,9 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var member bool
-
-	err = h.db.QueryRow(
-		`SELECT EXISTS(
-			SELECT 1
-			FROM server_members sm
-			JOIN channels c ON c.server_id = sm.server_id
-			WHERE sm.user_id = ?
-			AND c.id = ?
-		)`,
-		userID,
-		channelID,
-	).Scan(&member)
-
+	// Check that the user is a member of the server
+	// that this channel belongs to.
+	member, err := h.repo.IsMember(userID, channelID)
 	if err != nil {
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
@@ -78,9 +67,8 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := h.db.Exec(
-		`INSERT INTO messages (channel_id, user_id, content)
-		 VALUES (?, ?, ?)`,
+	// Create the message.
+	messageID, err := h.repo.Create(
 		channelID,
 		userID,
 		data.Content,
@@ -91,40 +79,15 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	messageID, err := result.LastInsertId()
-	if err != nil {
-		http.Error(w, "Could not get message ID", http.StatusInternalServerError)
-		return
-	}
-
-	var message Message
-
-	err = h.db.QueryRow(
-		`SELECT
-			m.id,
-			m.channel_id,
-			m.user_id,
-			u.username,
-			m.content,
-			m.created_at
-		FROM messages m
-		JOIN users u ON u.id = m.user_id
-		WHERE m.id = ?`,
-		messageID,
-	).Scan(
-		&message.ID,
-		&message.ChannelID,
-		&message.UserID,
-		&message.Username,
-		&message.Content,
-		&message.CreatedAt,
-	)
+	// Get the complete message, including the username and timestamp.
+	message, err := h.repo.GetByID(int(messageID))
 
 	if err != nil {
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 
+	// Create the realtime event.
 	event := realtime.Event{
 		Type: "message_created",
 		Data: message,
@@ -136,10 +99,10 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Send the message to everyone currently connected
-	// to this channel.
+	// Send the event to everyone connected to this channel.
 	h.hub.Broadcast(channelID, eventData)
 
+	// Return the created message to the HTTP client.
 	response := MessageResponse{
 		Message: message,
 	}
@@ -147,7 +110,9 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 
-	json.NewEncoder(w).Encode(response)
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		return
+	}
 }
 
 func (h *Handler) GetMessages(w http.ResponseWriter, r *http.Request) {
@@ -163,20 +128,7 @@ func (h *Handler) GetMessages(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var member bool
-
-	err = h.db.QueryRow(
-		`SELECT EXISTS(
-			SELECT 1
-			FROM server_members sm
-			JOIN channels c ON c.server_id = sm.server_id
-			WHERE sm.user_id = ?
-			AND c.id = ?
-		)`,
-		userID,
-		channelID,
-	).Scan(&member)
-
+	member, err := h.repo.IsMember(userID, channelID)
 	if err != nil {
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
@@ -187,49 +139,8 @@ func (h *Handler) GetMessages(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rows, err := h.db.Query(
-		`SELECT
-			m.id,
-			m.channel_id,
-			m.user_id,
-			u.username,
-			m.content,
-			m.created_at
-		FROM messages m
-		JOIN users u ON u.id = m.user_id
-		WHERE m.channel_id = ?
-		ORDER BY m.id DESC
-		LIMIT 100`,
-		channelID,
-	)
-
+	messages, err := h.repo.GetByChannelID(channelID)
 	if err != nil {
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
-	}
-	defer rows.Close()
-
-	messages := make([]Message, 0)
-
-	for rows.Next() {
-		var message Message
-
-		if err := rows.Scan(
-			&message.ID,
-			&message.ChannelID,
-			&message.UserID,
-			&message.Username,
-			&message.Content,
-			&message.CreatedAt,
-		); err != nil {
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
-			return
-		}
-
-		messages = append(messages, message)
-	}
-
-	if err := rows.Err(); err != nil {
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
@@ -240,5 +151,154 @@ func (h *Handler) GetMessages(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 
-	json.NewEncoder(w).Encode(response)
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		return
+	}
+}
+
+func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
+	messageID, err := strconv.Atoi(r.PathValue("messageID"))
+	if err != nil {
+		http.Error(w, "Invalid message ID", http.StatusBadRequest)
+		return
+	}
+
+	userID, ok := users.UserIDFromContext(r.Context())
+	if !ok {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	// Get the message.
+	message, err := h.repo.GetByID(messageID)
+
+	if err == sql.ErrNoRows {
+		http.Error(w, "Message not found", http.StatusNotFound)
+		return
+	}
+
+	if err != nil {
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	// Only the author can delete the message.
+	if message.UserID != userID {
+		http.Error(w, "You cannot delete this message", http.StatusForbidden)
+		return
+	}
+
+	// Delete the message.
+	if err := h.repo.Delete(messageID); err != nil {
+		http.Error(w, "Could not delete message", http.StatusInternalServerError)
+		return
+	}
+
+	// Tell every connected client in this channel.
+	event := realtime.Event{
+		Type: "message_deleted",
+		Data: struct {
+			ID int `json:"id"`
+		}{
+			ID: message.ID,
+		},
+	}
+
+	eventData, err := json.Marshal(event)
+	if err != nil {
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	h.hub.Broadcast(message.ChannelID, eventData)
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
+	messageID, err := strconv.Atoi(r.PathValue("messageID"))
+	if err != nil {
+		http.Error(w, "Invalid message ID", http.StatusBadRequest)
+		return
+	}
+
+	userID, ok := users.UserIDFromContext(r.Context())
+	if !ok {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	var data UpdateMessageRequest
+
+	if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
+		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	data.Content = strings.TrimSpace(data.Content)
+
+	if data.Content == "" {
+		http.Error(w, "Message cannot be empty", http.StatusBadRequest)
+		return
+	}
+
+	if len(data.Content) > 2000 {
+		http.Error(w, "Message too long", http.StatusBadRequest)
+		return
+	}
+
+	// Get the message.
+	message, err := h.repo.GetByID(messageID)
+
+	if err == sql.ErrNoRows {
+		http.Error(w, "Message not found", http.StatusNotFound)
+		return
+	}
+
+	if err != nil {
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	// Only the author can edit the message.
+	if message.UserID != userID {
+		http.Error(w, "You cannot edit this message", http.StatusForbidden)
+		return
+	}
+
+	// Update the message.
+	if err := h.repo.Update(messageID, data.Content); err != nil {
+		http.Error(w, "Could not update message", http.StatusInternalServerError)
+		return
+	}
+
+	// Update the copy we already have so we can
+	// send the updated message to the clients.
+	message.Content = data.Content
+
+	// Broadcast the updated message.
+	event := realtime.Event{
+		Type: "message_updated",
+		Data: message,
+	}
+
+	eventData, err := json.Marshal(event)
+	if err != nil {
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	h.hub.Broadcast(message.ChannelID, eventData)
+
+	// Return the updated message.
+	response := MessageResponse{
+		Message: message,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		return
+	}
 }

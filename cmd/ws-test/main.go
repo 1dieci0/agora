@@ -2,12 +2,18 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 
 	"github.com/coder/websocket"
 )
+
+type Event struct {
+	Type string          `json:"type"`
+	Data json.RawMessage `json:"data"`
+}
 
 func main() {
 	ctx := context.Background()
@@ -37,6 +43,19 @@ func main() {
 			log.Fatal(err)
 		}
 
-		fmt.Println("Received:", string(data))
+		var event Event
+
+		if err := json.Unmarshal(data, &event); err != nil {
+			log.Println("Invalid event:", err)
+			continue
+		}
+
+		switch event.Type {
+		case "message_created":
+			fmt.Println("New message:", string(event.Data))
+
+		default:
+			fmt.Println("Unknown event:", event.Type)
+		}
 	}
 }
