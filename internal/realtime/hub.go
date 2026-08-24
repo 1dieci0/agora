@@ -1,7 +1,6 @@
 package realtime
 
 import (
-	"context"
 	"sync"
 
 	"github.com/coder/websocket"
@@ -11,6 +10,8 @@ type Client struct {
 	Conn      *websocket.Conn
 	UserID    int
 	ChannelID int
+
+	send chan []byte
 }
 
 type Hub struct {
@@ -41,7 +42,17 @@ func (h *Hub) Remove(client *Client) {
 
 	clients := h.clients[client.ChannelID]
 
+	if clients == nil {
+		return
+	}
+
+	if _, exists := clients[client]; !exists {
+		return
+	}
+
 	delete(clients, client)
+
+	close(client.send)
 
 	if len(clients) == 0 {
 		delete(h.clients, client.ChannelID)
@@ -60,13 +71,10 @@ func (h *Hub) Broadcast(channelID int, data []byte) {
 	h.mu.RUnlock()
 
 	for _, client := range clients {
-		err := client.Conn.Write(
-			context.Background(),
-			websocket.MessageText,
-			data,
-		)
-
-		if err != nil {
+		select {
+		case client.send <- data:
+		default:
+			// Client isn't consuming messages fast enough.
 			h.Remove(client)
 		}
 	}

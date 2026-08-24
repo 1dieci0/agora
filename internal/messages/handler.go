@@ -125,8 +125,12 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Convert the message to JSON for WebSocket clients.
-	messageData, err := json.Marshal(message)
+	event := realtime.Event{
+		Type: "message_created",
+		Data: message,
+	}
+
+	eventData, err := json.Marshal(event)
 	if err != nil {
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
@@ -134,7 +138,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 
 	// Send the message to everyone currently connected
 	// to this channel.
-	h.hub.Broadcast(channelID, messageData)
+	h.hub.Broadcast(channelID, eventData)
 
 	response := MessageResponse{
 		Message: message,

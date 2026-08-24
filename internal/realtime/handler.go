@@ -68,9 +68,12 @@ func (h *Handler) Connect(w http.ResponseWriter, r *http.Request) {
 		Conn:      conn,
 		UserID:    userID,
 		ChannelID: channelID,
+		send:      make(chan []byte, 32),
 	}
 
 	h.hub.Add(client)
+
+	go client.writeLoop()
 
 	defer func() {
 		h.hub.Remove(client)
