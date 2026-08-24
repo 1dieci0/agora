@@ -34,18 +34,37 @@ func NewApp() (*App, error) {
 		return nil, err
 	}
 
+	//realtime
 	hub := realtime.NewHub()
+	// Repositories
+	serverRepo := servers.NewRepository(db)
+	channelRepo := channels.NewRepository(db)
 	messageRepo := messages.NewRepository(db)
+	usersRepo := users.NewRepository(db)
 
 	app := &App{
-		db:       db,
-		router:   http.NewServeMux(),
-		users:    users.NewHandler(db),
-		servers:  servers.NewHandler(db),
-		channels: channels.NewHandler(db),
-		messages: messages.NewHandler(messageRepo, hub),
-		hub:      hub,
-		realtime: realtime.NewHandler(db, hub),
+		db:     db,
+		router: http.NewServeMux(),
+
+		users: users.NewHandler(usersRepo),
+
+		servers: servers.NewHandler(serverRepo),
+
+		channels: channels.NewHandler(
+			channelRepo,
+			serverRepo,
+		),
+
+		messages: messages.NewHandler(
+			messageRepo,
+			channelRepo,
+			serverRepo,
+			hub,
+		),
+
+		hub: hub,
+
+		realtime: realtime.NewHandler(channelRepo, serverRepo, hub),
 	}
 
 	app.RegisterRoutes()
@@ -84,6 +103,8 @@ func (app *App) RegisterRoutes() {
 		app.users.RequireAuth(app.users.GetMe),
 	)
 
+	//servers
+
 	app.router.HandleFunc(
 		"GET /api/servers/{id}",
 		app.users.RequireAuth(app.servers.Get),
@@ -104,11 +125,6 @@ func (app *App) RegisterRoutes() {
 		app.users.RequireAuth(app.servers.GetServers),
 	)
 
-	// app.router.HandleFunc(
-	// 	"POST /api/servers/{id}/join",
-	// 	app.users.RequireAuth(app.servers.Join),
-	// )
-
 	app.router.HandleFunc(
 		"DELETE /api/servers/{id}/members/me",
 		app.users.RequireAuth(app.servers.Leave),
@@ -124,6 +140,8 @@ func (app *App) RegisterRoutes() {
 		app.users.RequireAuth(app.servers.JoinInvite),
 	)
 
+	//channel
+
 	app.router.HandleFunc(
 		"POST /api/servers/{serverID}/channels",
 		app.users.RequireAuth(app.channels.Create),
@@ -133,6 +151,8 @@ func (app *App) RegisterRoutes() {
 		"GET /api/servers/{serverID}/channels",
 		app.users.RequireAuth(app.channels.GetChannels),
 	)
+
+	//messages
 
 	app.router.HandleFunc(
 		"POST /api/channels/{channelID}/messages",
@@ -145,11 +165,6 @@ func (app *App) RegisterRoutes() {
 	)
 
 	app.router.HandleFunc(
-		"GET /ws/channels/{channelID}",
-		app.users.RequireAuth(app.realtime.Connect),
-	)
-
-	app.router.HandleFunc(
 		"DELETE /api/messages/{messageID}",
 		app.users.RequireAuth(app.messages.Delete),
 	)
@@ -157,5 +172,11 @@ func (app *App) RegisterRoutes() {
 	app.router.HandleFunc(
 		"PATCH /api/messages/{messageID}",
 		app.users.RequireAuth(app.messages.Update),
+	)
+
+	//realtime
+	app.router.HandleFunc(
+		"GET /ws/channels/{channelID}",
+		app.users.RequireAuth(app.realtime.Connect),
 	)
 }

@@ -5,20 +5,24 @@ import (
 	"net/http"
 	"strconv"
 
+	"agora/internal/channels"
+	"agora/internal/servers"
 	"agora/internal/users"
 
 	"github.com/coder/websocket"
 )
 
 type Handler struct {
-	db  *sql.DB
-	hub *Hub
+	channelRepo *channels.Repository
+	serverRepo  *servers.Repository
+	hub         *Hub
 }
 
-func NewHandler(db *sql.DB, hub *Hub) *Handler {
+func NewHandler(channelRepo *channels.Repository, serverRepo *servers.Repository, hub *Hub) *Handler {
 	return &Handler{
-		db:  db,
-		hub: hub,
+		channelRepo: channelRepo,
+		serverRepo:  serverRepo,
+		hub:         hub,
 	}
 }
 
@@ -35,20 +39,17 @@ func (h *Handler) Connect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var member bool
+	channel, err := h.channelRepo.GetByID(channelID)
+	if err == sql.ErrNoRows {
+		http.Error(w, "Channel not found", http.StatusNotFound)
+		return
+	}
+	if err != nil {
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
 
-	err = h.db.QueryRow(
-		`SELECT EXISTS(
-			SELECT 1
-			FROM server_members sm
-			JOIN channels c ON c.server_id = sm.server_id
-			WHERE sm.user_id = ?
-			AND c.id = ?
-		)`,
-		userID,
-		channelID,
-	).Scan(&member)
-
+	member, err := h.serverRepo.IsMember(userID, channel.ServerID)
 	if err != nil {
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return

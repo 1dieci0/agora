@@ -8,13 +8,11 @@ import (
 )
 
 type Handler struct {
-	db *sql.DB
+	repo *Repository
 }
 
-func NewHandler(db *sql.DB) *Handler {
-	return &Handler{
-		db: db,
-	}
+func NewHandler(repo *Repository) *Handler {
+	return &Handler{repo: repo}
 }
 
 func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
@@ -61,20 +59,9 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := h.db.Exec(
-		"INSERT INTO users (username, password_hash) VALUES (?, ?)",
-		data.Username,
-		passwordHash,
-	)
-
+	id, err := h.repo.Create(data.Username, passwordHash)
 	if err != nil {
 		http.Error(w, "Could not create user", http.StatusInternalServerError)
-		return
-	}
-
-	id, err := result.LastInsertId()
-	if err != nil {
-		http.Error(w, "Could not get user ID", http.StatusInternalServerError)
 		return
 	}
 
@@ -91,7 +78,9 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 
-	json.NewEncoder(w).Encode(response)
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		return
+	}
 }
 
 func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
@@ -108,23 +97,12 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var (
-		userID       int
-		username     string
-		passwordHash string
-	)
-
-	err = h.db.QueryRow(
-		"SELECT id, username, password_hash FROM users WHERE username = ?",
-		data.Username,
-	).Scan(&userID, &username, &passwordHash)
-
+	userID, username, passwordHash, err := h.repo.GetByUsername(data.Username)
+	if err == sql.ErrNoRows {
+		http.Error(w, "Invalid username or password", http.StatusUnauthorized)
+		return
+	}
 	if err != nil {
-		if err == sql.ErrNoRows {
-			http.Error(w, "Invalid username or password", http.StatusUnauthorized)
-			return
-		}
-
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
@@ -140,7 +118,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sessionID, err := createSession(h.db, userID)
+	sessionID, err := h.repo.CreateSession(userID)
 	if err != nil {
 		http.Error(w, "Could not create session", http.StatusInternalServerError)
 		return
@@ -167,7 +145,9 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 
-	json.NewEncoder(w).Encode(response)
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		return
+	}
 }
 
 func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
@@ -182,7 +162,7 @@ func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = deleteSession(h.db, cookie.Value)
+	err = h.repo.DeleteSession(cookie.Value)
 	if err != nil {
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
@@ -209,22 +189,12 @@ func (h *Handler) RequireAuth(next http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 
-		var userID int
-
-		err = h.db.QueryRow(
-			`SELECT user_id
-			 FROM sessions
-			 WHERE id = ?
-			 AND expires_at > datetime('now')`,
-			cookie.Value,
-		).Scan(&userID)
-
+		userID, err := h.repo.GetUserIDFromSession(cookie.Value)
+		if err == sql.ErrNoRows {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
 		if err != nil {
-			if err == sql.ErrNoRows {
-				http.Error(w, "Unauthorized", http.StatusUnauthorized)
-				return
-			}
-
 			http.Error(w, "Internal server error", http.StatusInternalServerError)
 			return
 		}
@@ -247,22 +217,12 @@ func (h *Handler) GetMe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var user User
-
-	err := h.db.QueryRow(
-		"SELECT id, username FROM users WHERE id = ?",
-		userID,
-	).Scan(
-		&user.ID,
-		&user.Username,
-	)
-
+	user, err := h.repo.GetByID(userID)
+	if err == sql.ErrNoRows {
+		http.Error(w, "User not found", http.StatusNotFound)
+		return
+	}
 	if err != nil {
-		if err == sql.ErrNoRows {
-			http.Error(w, "User not found", http.StatusNotFound)
-			return
-		}
-
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}

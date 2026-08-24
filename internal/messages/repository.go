@@ -1,8 +1,6 @@
 package messages
 
-import (
-	"database/sql"
-)
+import "database/sql"
 
 type Repository struct {
 	db *sql.DB
@@ -12,6 +10,30 @@ func NewRepository(db *sql.DB) *Repository {
 	return &Repository{
 		db: db,
 	}
+}
+
+func (r *Repository) Create(
+	channelID int,
+	userID int,
+	content string,
+) (int64, error) {
+	result, err := r.db.Exec(
+		`INSERT INTO messages (
+			channel_id,
+			user_id,
+			content
+		)
+		VALUES (?, ?, ?)`,
+		channelID,
+		userID,
+		content,
+	)
+
+	if err != nil {
+		return 0, err
+	}
+
+	return result.LastInsertId()
 }
 
 func (r *Repository) GetByID(id int) (Message, error) {
@@ -39,70 +61,6 @@ func (r *Repository) GetByID(id int) (Message, error) {
 	)
 
 	return message, err
-}
-
-func (r *Repository) Create(
-	channelID int,
-	userID int,
-	content string,
-) (int64, error) {
-	result, err := r.db.Exec(
-		`INSERT INTO messages (
-			channel_id,
-			user_id,
-			content
-		)
-		VALUES (?, ?, ?)`,
-		channelID,
-		userID,
-		content,
-	)
-
-	if err != nil {
-		return 0, err
-	}
-
-	return result.LastInsertId()
-}
-
-func (r *Repository) Update(id int, content string) error {
-	_, err := r.db.Exec(
-		`UPDATE messages
-		 SET content = ?
-		 WHERE id = ?`,
-		content,
-		id,
-	)
-
-	return err
-}
-
-func (r *Repository) Delete(id int) error {
-	_, err := r.db.Exec(
-		`DELETE FROM messages
-		 WHERE id = ?`,
-		id,
-	)
-
-	return err
-}
-
-func (r *Repository) IsMember(userID, channelID int) (bool, error) {
-	var member bool
-
-	err := r.db.QueryRow(
-		`SELECT EXISTS(
-			SELECT 1
-			FROM server_members sm
-			JOIN channels c ON c.server_id = sm.server_id
-			WHERE sm.user_id = ?
-			AND c.id = ?
-		)`,
-		userID,
-		channelID,
-	).Scan(&member)
-
-	return member, err
 }
 
 func (r *Repository) GetByChannelID(channelID int) ([]Message, error) {
@@ -151,4 +109,26 @@ func (r *Repository) GetByChannelID(channelID int) ([]Message, error) {
 	}
 
 	return messages, nil
+}
+
+func (r *Repository) Update(id int, content string) error {
+	_, err := r.db.Exec(
+		`UPDATE messages
+		 SET content = ?
+		 WHERE id = ?`,
+		content,
+		id,
+	)
+
+	return err
+}
+
+func (r *Repository) Delete(id int) error {
+	_, err := r.db.Exec(
+		`DELETE FROM messages
+		 WHERE id = ?`,
+		id,
+	)
+
+	return err
 }

@@ -1,21 +1,28 @@
 package channels
 
 import (
-	"agora/internal/users"
 	"database/sql"
 	"encoding/json"
 	"net/http"
 	"strconv"
 	"strings"
+
+	"agora/internal/servers"
+	"agora/internal/users"
 )
 
 type Handler struct {
-	db *sql.DB
+	repo       *Repository
+	serverRepo *servers.Repository
 }
 
-func NewHandler(db *sql.DB) *Handler {
+func NewHandler(
+	repo *Repository,
+	serverRepo *servers.Repository,
+) *Handler {
 	return &Handler{
-		db: db,
+		repo:       repo,
+		serverRepo: serverRepo,
 	}
 }
 
@@ -41,7 +48,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 
 	data.Name = strings.TrimSpace(data.Name)
 
-	if len(data.Name) < 1 {
+	if data.Name == "" {
 		http.Error(w, "Channel name is required", http.StatusBadRequest)
 		return
 	}
@@ -56,19 +63,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var member bool
-
-	err = h.db.QueryRow(
-		`SELECT EXISTS(
-			SELECT 1
-			FROM server_members
-			WHERE server_id = ?
-			AND user_id = ?
-		)`,
-		serverID,
-		userID,
-	).Scan(&member)
-
+	member, err := h.serverRepo.IsMember(userID, serverID)
 	if err != nil {
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
@@ -79,9 +74,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := h.db.Exec(
-		`INSERT INTO channels (server_id, name, type)
-		 VALUES (?, ?, ?)`,
+	channelID, err := h.repo.Create(
 		serverID,
 		data.Name,
 		data.Type,
@@ -89,12 +82,6 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		http.Error(w, "Could not create channel", http.StatusInternalServerError)
-		return
-	}
-
-	channelID, err := result.LastInsertId()
-	if err != nil {
-		http.Error(w, "Could not get channel ID", http.StatusInternalServerError)
 		return
 	}
 
@@ -113,7 +100,9 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 
-	json.NewEncoder(w).Encode(response)
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		return
+	}
 }
 
 func (h *Handler) GetChannels(w http.ResponseWriter, r *http.Request) {
@@ -129,19 +118,7 @@ func (h *Handler) GetChannels(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var member bool
-
-	err = h.db.QueryRow(
-		`SELECT EXISTS(
-			SELECT 1
-			FROM server_members
-			WHERE server_id = ?
-			AND user_id = ?
-		)`,
-		serverID,
-		userID,
-	).Scan(&member)
-
+	member, err := h.serverRepo.IsMember(userID, serverID)
 	if err != nil {
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
@@ -152,41 +129,8 @@ func (h *Handler) GetChannels(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rows, err := h.db.Query(
-		`SELECT id, server_id, name, type
-		 FROM channels
-		 WHERE server_id = ?
-		 ORDER BY id`,
-		serverID,
-	)
-
+	channels, err := h.repo.GetByServerID(serverID)
 	if err != nil {
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
-	}
-	defer rows.Close()
-
-	channels := make([]Channel, 0)
-
-	for rows.Next() {
-		var channel Channel
-
-		err := rows.Scan(
-			&channel.ID,
-			&channel.ServerID,
-			&channel.Name,
-			&channel.Type,
-		)
-
-		if err != nil {
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
-			return
-		}
-
-		channels = append(channels, channel)
-	}
-
-	if err := rows.Err(); err != nil {
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
@@ -197,5 +141,54 @@ func (h *Handler) GetChannels(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 
-	json.NewEncoder(w).Encode(response)
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		return
+	}
+}
+
+func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
+	channelID, err := strconv.Atoi(r.PathValue("channelID"))
+	if err != nil {
+		http.Error(w, "Invalid channel ID", http.StatusBadRequest)
+		return
+	}
+
+	userID, ok := users.UserIDFromContext(r.Context())
+	if !ok {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	channel, err := h.repo.GetByID(channelID)
+
+	if err == sql.ErrNoRows {
+		http.Error(w, "Channel not found", http.StatusNotFound)
+		return
+	}
+
+	if err != nil {
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	member, err := h.serverRepo.IsMember(userID, channel.ServerID)
+	if err != nil {
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	if !member {
+		http.Error(w, "Channel not found", http.StatusNotFound)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+
+	response := ChannelResponse{
+		Channel: channel,
+	}
+
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		return
+	}
 }

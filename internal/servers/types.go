@@ -32,3 +32,13 @@ type CreateInviteResponse struct {
 	Message string `json:"message"`
 	Code    string `json:"code"`
 }
+type Channel struct {
+	ID        int    `json:"id"`
+	ServerID  int    `json:"server_id"`
+	Name      string `json:"name"`
+	CreatedAt string `json:"created_at"`
+}
+
+type ChannelsResponse struct {
+	Channels []Channel `json:"channels"`
+}
