@@ -6,6 +6,8 @@ import (
 
 	"agora/internal/channels"
 	"agora/internal/database"
+	"agora/internal/messages"
+	"agora/internal/realtime"
 	"agora/internal/servers"
 	"agora/internal/users"
 )
@@ -16,6 +18,9 @@ type App struct {
 	users    *users.Handler
 	servers  *servers.Handler
 	channels *channels.Handler
+	messages *messages.Handler
+	hub      *realtime.Hub
+	realtime *realtime.Handler
 }
 
 func NewApp() (*App, error) {
@@ -29,12 +34,17 @@ func NewApp() (*App, error) {
 		return nil, err
 	}
 
+	hub := realtime.NewHub()
+
 	app := &App{
 		db:       db,
 		router:   http.NewServeMux(),
 		users:    users.NewHandler(db),
 		servers:  servers.NewHandler(db),
 		channels: channels.NewHandler(db),
+		messages: messages.NewHandler(db, hub),
+		hub:      hub,
+		realtime: realtime.NewHandler(db, hub),
 	}
 
 	app.RegisterRoutes()
@@ -121,5 +131,20 @@ func (app *App) RegisterRoutes() {
 	app.router.HandleFunc(
 		"GET /api/servers/{serverID}/channels",
 		app.users.RequireAuth(app.channels.GetChannels),
+	)
+
+	app.router.HandleFunc(
+		"POST /api/channels/{channelID}/messages",
+		app.users.RequireAuth(app.messages.Create),
+	)
+
+	app.router.HandleFunc(
+		"GET /api/channels/{channelID}/messages",
+		app.users.RequireAuth(app.messages.GetMessages),
+	)
+
+	app.router.HandleFunc(
+		"GET /ws/channels/{channelID}",
+		app.users.RequireAuth(app.realtime.Connect),
 	)
 }
