@@ -1,0 +1,121 @@
+### 
+# sign up
+POST http://localhost:8080/api/users
+Content-Type: application/json
+
+{
+    "username": "alex",
+    "password": "hello123"
+}
+
+###
+# login 
+POST http://localhost:8080/api/login
+Content-Type: application/json
+
+{
+    "username": "alex",
+    "password": "hello123"
+}
+
+###
+# test auth
+GET http://localhost:8080/api/me
+
+###
+# create server
+POST http://localhost:8080/api/servers
+Content-Type: application/json
+
+{
+    "name": "The Boys"
+}
+
+###
+# create invite
+POST http://localhost:8080/api/servers/1/invites
+###
+
+###
+#create channel
+POST http://localhost:8080/api/servers/1/channels
+Content-Type: application/json
+
+{
+    "name": "general",
+    "type": "text"
+}
+###
+POST http://localhost:8080/api/servers/1/channels
+Content-Type: application/json
+
+{
+    "name": "General Voice",
+    "type": "voice"
+}
+###
+
+###
+# get channels
+GET http://localhost:8080/api/servers/1/channels
+###
+
+# list servers
+GET http://localhost:8080/api/servers
+###
+
+###
+# get server 1
+GET http://localhost:8080/api/servers/1
+
+###
+
+###
+# get server 1 membmers
+GET http://localhost:8080/api/servers/1/members
+
+###
+#join server
+POST http://localhost:8080/api/servers/1/join
+###
+
+#quit server
+DELETE http://localhost:8080/api/servers/1/members/me
+
+### 
+# sign up
+POST http://localhost:8080/api/users
+Content-Type: application/json
+
+{
+    "username": "bob",
+    "password": "xdxd"
+}
+
+###
+# login 
+POST http://localhost:8080/api/login
+Content-Type: application/json
+
+{
+    "username": "bob",
+    "password": "xdxd"
+}
+
+###
+#join server with invite
+POST http://localhost:8080/api/invites/HGUQKVVt97o/join
+
+###
+
+POST http://localhost:8080/api/users
+Content-Type: application/json
+
+{
+    "username": "christiano",
+    "password": "test"
+}
+
+###
+
+GET http://localhost:8080/api/users
