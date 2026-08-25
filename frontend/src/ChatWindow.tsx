@@ -1,16 +1,36 @@
-import { useEffect, useState, type SyntheticEvent } from "react";
-import { getMessages, sendMessage } from "./api";
+import { useEffect,
+  useRef,
+  useState,
+  type SyntheticEvent,
+  type ChangeEvent,
+} from "react";
+import {
+  deleteMessage,
+  getMessages,
+  sendMessage,
+  updateMessage,
+} from "./api";
 import { connectToChannel } from "./websocket";
-import type { Channel, Message } from "./types";
+import type { Channel, Message, User } from "./types";
 
 type ChatWindowProps = {
+  user: User;
   channel: Channel | null;
 };
 
-function ChatWindow({ channel }: ChatWindowProps) {
+function ChatWindow({ user, channel }: ChatWindowProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [content, setContent] = useState("");
   const [loading, setLoading] = useState(false);
+
+  const [editingMessageID, setEditingMessageID] = useState<number | null>(
+  null,
+  );
+
+  const [editingContent, setEditingContent] = useState("");
+
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const messageInputRef = useRef<HTMLTextAreaElement | null>(null);
 
   useEffect(() => {
     if (channel === null) {
@@ -33,6 +53,12 @@ function ChatWindow({ channel }: ChatWindowProps) {
 
     loadMessages();
   }, [channel]);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({
+      behavior: "smooth",
+    });
+  }, [messages]);
 
   useEffect(() => {
     if (channel === null) {
@@ -76,6 +102,24 @@ function ChatWindow({ channel }: ChatWindowProps) {
     };
   }, [channel]);
 
+  function handleContentChange(
+    event: ChangeEvent<HTMLTextAreaElement>,
+  ) {
+    const textarea = event.currentTarget;
+
+    textarea.style.height = "auto";
+
+    const maxHeight = 400;
+
+    textarea.style.height = `${Math.min(
+      textarea.scrollHeight,
+      maxHeight,
+    )}px`;
+
+    setContent(textarea.value);
+  }
+
+
   async function handleSubmit(
     event: SyntheticEvent<HTMLFormElement>,
   ) {
@@ -97,12 +141,51 @@ function ChatWindow({ channel }: ChatWindowProps) {
       await sendMessage(channel.id, trimmed);
 
       setContent("");
+      if (messageInputRef.current) {
+        messageInputRef.current.style.height = "auto";
+      }
     } catch (error) {
       console.error(error);
     } finally {
       setLoading(false);
     }
   }
+
+  async function handleDelete(messageID: number) {
+  try {
+    await deleteMessage(messageID);
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+  function startEditing(message: Message) {
+    setEditingMessageID(message.id);
+    setEditingContent(message.content);
+  }
+
+  function cancelEditing() {
+    setEditingMessageID(null);
+    setEditingContent("");
+  }
+
+  async function handleEdit(messageID: number) {
+    const trimmed = editingContent.trim();
+
+    if (!trimmed) {
+      return;
+    }
+
+    try {
+      await updateMessage(messageID, trimmed);
+
+      cancelEditing();
+    } catch (error) {
+      console.error(error);
+    }
+  }
+
+
 
   if (channel === null) {
     return (
@@ -120,27 +203,116 @@ function ChatWindow({ channel }: ChatWindowProps) {
       </header>
 
       <div className="message-list">
-        {messages.map((message) => (
-          <div className="message" key={message.id}>
-            <div className="message-author">
-              {message.username}
-            </div>
+        {messages.map((message) => {
 
-            <div className="message-content">
-              {message.content}
+          const isOwnMessage = message.user_id === user.id;
+          const isEditing = editingMessageID === message.id;
+
+          return (
+            <div className="message" key={message.id}>
+              <div className="message-header">
+                <span className="message-author">
+                  {message.username}
+                </span>
+
+                <span className="message-time">
+                  {new Date(message.created_at).toLocaleTimeString([], {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </span>
+
+                {isOwnMessage && !isEditing && (
+                  <div className="message-actions">
+                    <button
+                      type="button"
+                      onClick={() => startEditing(message)}
+                    >
+                      Edit
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleDelete(message.id)}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                )}
+              </div>
+              
+
+              {isEditing ? (
+                <div className="message-edit">
+                  <input
+                    value={editingContent}
+                    onChange={(event) =>
+                      setEditingContent(event.target.value)
+                    }
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        handleEdit(message.id);
+                      }
+
+                      if (event.key === "Escape") {
+                        cancelEditing();
+                      }
+                    }}
+                  />
+
+                  <div className="edit-actions">
+                    <button
+                      type="button"
+                      onClick={() => handleEdit(message.id)}
+                    >
+                      Save
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={cancelEditing}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="message-content">
+                  {message.content}
+                </div>
+              )}
             </div>
-          </div>
-        ))}
+          );
+        })}
+
+      <div ref={messagesEndRef} />
+
       </div>
 
       <form className="message-form" onSubmit={handleSubmit}>
-        <input
-          type="text"
+
+        <textarea
+          ref={messageInputRef}
           placeholder={`Message #${channel.name}`}
           value={content}
-          onChange={(event) => setContent(event.target.value)}
+          onChange={handleContentChange}
           disabled={loading}
+          rows={1}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && !event.shiftKey) {
+              event.preventDefault();
+
+              if (!content.trim() || loading) {
+                return;
+              }
+
+              event.currentTarget.form?.requestSubmit();
+            }
+          }}
         />
+
+
+
 
         <button
           type="submit"

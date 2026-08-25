@@ -121,3 +121,44 @@ export async function sendMessage(
   return data.message;
 }
 
+
+export async function updateMessage(
+  messageID: number,
+  content: string,
+): Promise<Message> {
+  const response = await fetch(
+    `${API_URL}/api/messages/${messageID}`,
+    {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      credentials: "include",
+      body: JSON.stringify({
+        content,
+      }),
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error("Could not update message");
+  }
+
+  const data = await response.json();
+
+  return data.message;
+}
+
+export async function deleteMessage(messageID: number): Promise<void> {
+  const response = await fetch(
+    `${API_URL}/api/messages/${messageID}`,
+    {
+      method: "DELETE",
+      credentials: "include",
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error("Could not delete message");
+  }
+}

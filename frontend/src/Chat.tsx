@@ -1,25 +1,24 @@
 import { useEffect, useState } from "react";
 import { getChannels, getServers } from "./api";
+import type { Channel, Server, User } from "./types";
 import ServerSidebar from "./ServerSidebar";
 import ChannelSidebar from "./ChannelSidebar";
-import type { Channel, Server, User } from "./types";
 import ChatWindow from "./ChatWindow";
 
 type ChatProps = {
   user: User;
+  onLogout: () => void;
 };
 
-function Chat({ user }: ChatProps) {
+function Chat({ user, onLogout }: ChatProps) {
   const [servers, setServers] = useState<Server[]>([]);
   const [channels, setChannels] = useState<Channel[]>([]);
 
-  const [selectedServerId, setSelectedServerId] = useState<number | null>(
-    null,
-  );
+  const [selectedServerId, setSelectedServerId] =
+    useState<number | null>(null);
 
-  const [selectedChannelId, setSelectedChannelId] = useState<number | null>(
-    null,
-  );
+  const [selectedChannelId, setSelectedChannelId] =
+    useState<number | null>(null);
 
   useEffect(() => {
     async function loadServers() {
@@ -32,75 +31,75 @@ function Chat({ user }: ChatProps) {
           setSelectedServerId(servers[0].id);
         }
       } catch (error) {
-        console.error(error);
+        console.error("Could not load servers:", error);
       }
     }
 
     loadServers();
   }, []);
 
-    useEffect(() => {
+  useEffect(() => {
     if (selectedServerId === null) {
-        setChannels([]);
-        setSelectedChannelId(null);
-        return;
+      setChannels([]);
+      setSelectedChannelId(null);
+      return;
     }
 
     const serverId = selectedServerId;
 
     async function loadChannels() {
-        try {
+      try {
         const channels = await getChannels(serverId);
 
         setChannels(channels);
 
         if (channels.length > 0) {
-            setSelectedChannelId(channels[0].id);
+          setSelectedChannelId(channels[0].id);
         } else {
-            setSelectedChannelId(null);
+          setSelectedChannelId(null);
         }
-        } catch (error) {
-        console.error(error);
+      } catch (error) {
+        console.error("Could not load channels:", error);
         setChannels([]);
         setSelectedChannelId(null);
-        }
+      }
     }
 
     loadChannels();
-    }, [selectedServerId]);
+  }, [selectedServerId]);
 
-
-
-  function handleSelectServer(serverId: number) {
-    setSelectedServerId(serverId);
+  function handleSelectServer(serverID: number) {
+    setSelectedServerId(serverID);
   }
 
-  function handleSelectChannel(channelId: number) {
-    setSelectedChannelId(channelId);
+  function handleSelectChannel(channelID: number) {
+    setSelectedChannelId(channelID);
   }
+
+  const selectedChannel =
+    channels.find(
+      (channel) => channel.id === selectedChannelId,
+    ) ?? null;
 
   return (
     <div className="app">
-        <ServerSidebar
-            servers={servers}
-            selectedServerId={selectedServerId}
-            onSelectServer={handleSelectServer}
-        />
+      <ServerSidebar
+        servers={servers}
+        selectedServerId={selectedServerId}
+        onSelectServer={handleSelectServer}
+        //onLogout={onLogout}
+      />
 
-        <ChannelSidebar
-            channels={channels}
-            selectedChannelId={selectedChannelId}
-            onSelectChannel={handleSelectChannel}
-        />
+      <ChannelSidebar
+        channels={channels}
+        selectedChannelId={selectedChannelId}
+        onSelectChannel={handleSelectChannel}
+      />
 
-        <ChatWindow
-            channel={
-                channels.find(
-                (channel) => channel.id === selectedChannelId,
-                ) ?? null
-        }
-        />
-
+      <ChatWindow
+        user={user}
+        channel={selectedChannel}
+      />
     </div>
   );
 }
