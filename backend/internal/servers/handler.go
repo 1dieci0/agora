@@ -532,3 +532,54 @@ func (h *Handler) RemoveMember(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusNoContent)
 }
+
+func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
+	serverID, err := strconv.Atoi(r.PathValue("id"))
+	if err != nil {
+		http.Error(w, "Invalid server ID", http.StatusBadRequest)
+		return
+	}
+
+	userID, ok := users.UserIDFromContext(r.Context())
+	if !ok {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	role, err := h.repo.GetMemberRole(userID, serverID)
+
+	if err == sql.ErrNoRows {
+		http.Error(w, "Server not found", http.StatusNotFound)
+		return
+	}
+
+	if err != nil {
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	if role != RoleOwner {
+		http.Error(
+			w,
+			"Only the server owner can delete the server",
+			http.StatusForbidden,
+		)
+		return
+	}
+
+	if err := h.repo.Delete(serverID); err != nil {
+		if err == sql.ErrNoRows {
+			http.Error(w, "Server not found", http.StatusNotFound)
+			return
+		}
+
+		http.Error(
+			w,
+			"Could not delete server",
+			http.StatusInternalServerError,
+		)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}

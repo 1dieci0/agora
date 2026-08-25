@@ -60,8 +60,13 @@ func (h *Handler) Connect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	conn, err := websocket.Accept(w, r, nil)
+	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
+		OriginPatterns: []string{
+			"localhost:5173",
+		},
+	})
 	if err != nil {
+		http.Error(w, "Could not establish WebSocket connection", http.StatusBadRequest)
 		return
 	}
 

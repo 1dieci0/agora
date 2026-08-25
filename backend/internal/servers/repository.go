@@ -245,3 +245,80 @@ func (r *Repository) UpdateMemberRole(
 
 	return err
 }
+
+func (r *Repository) Delete(serverID int) error {
+	tx, err := r.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	// Delete messages belonging to channels in this server.
+	_, err = tx.Exec(
+		`DELETE FROM messages
+		 WHERE channel_id IN (
+			SELECT id
+			FROM channels
+			WHERE server_id = ?
+		 )`,
+		serverID,
+	)
+	if err != nil {
+		return err
+	}
+
+	// Delete channels.
+	_, err = tx.Exec(
+		`DELETE FROM channels
+		 WHERE server_id = ?`,
+		serverID,
+	)
+	if err != nil {
+		return err
+	}
+
+	// Delete invites.
+	_, err = tx.Exec(
+		`DELETE FROM invites
+		 WHERE server_id = ?`,
+		serverID,
+	)
+	if err != nil {
+		return err
+	}
+
+	// Delete server members.
+	_, err = tx.Exec(
+		`DELETE FROM server_members
+		 WHERE server_id = ?`,
+		serverID,
+	)
+	if err != nil {
+		return err
+	}
+
+	// Finally delete the server.
+	result, err := tx.Exec(
+		`DELETE FROM servers
+		 WHERE id = ?`,
+		serverID,
+	)
+	if err != nil {
+		return err
+	}
+
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+
+	if rows == 0 {
+		return sql.ErrNoRows
+	}
+
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+
+	return nil
+}

@@ -77,7 +77,7 @@ func (app *App) Close() error {
 }
 
 func (app *App) Router() http.Handler {
-	return app.router
+	return cors(app.router)
 }
 
 func (app *App) RegisterRoutes() {
@@ -145,6 +145,11 @@ func (app *App) RegisterRoutes() {
 		app.users.RequireAuth(app.servers.JoinInvite),
 	)
 
+	app.router.HandleFunc(
+		"DELETE /api/servers/{id}",
+		app.users.RequireAuth(app.servers.Delete),
+	)
+
 	//channel
 
 	app.router.HandleFunc(
@@ -155,6 +160,16 @@ func (app *App) RegisterRoutes() {
 	app.router.HandleFunc(
 		"GET /api/servers/{serverID}/channels",
 		app.users.RequireAuth(app.channels.GetChannels),
+	)
+
+	app.router.HandleFunc(
+		"PATCH /api/channels/{channelID}",
+		app.users.RequireAuth(app.channels.Update),
+	)
+
+	app.router.HandleFunc(
+		"DELETE /api/channels/{channelID}",
+		app.users.RequireAuth(app.channels.Delete),
 	)
 
 	//messages

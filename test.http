@@ -100,7 +100,7 @@ Content-Type: application/json
 
 ###
 #join server with invite
-POST http://localhost:8080/api/invites/HGUQKVVt97o/join
+POST http://localhost:8080/api/invites/sDQKqnr1TJE/join
 
 ###
 

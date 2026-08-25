@@ -95,3 +95,38 @@ func (r *Repository) GetByServerID(serverID int) ([]Channel, error) {
 
 	return channels, nil
 }
+
+func (r *Repository) UpdateName(channelID int, name string) error {
+	_, err := r.db.Exec(
+		`UPDATE channels
+		 SET name = ?
+		 WHERE id = ?`,
+		name,
+		channelID,
+	)
+
+	return err
+}
+
+func (r *Repository) Delete(channelID int) error {
+	result, err := r.db.Exec(
+		`DELETE FROM channels
+		 WHERE id = ?`,
+		channelID,
+	)
+
+	if err != nil {
+		return err
+	}
+
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+
+	if rows == 0 {
+		return sql.ErrNoRows
+	}
+
+	return nil
+}

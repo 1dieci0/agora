@@ -20,3 +20,7 @@ type ChannelResponse struct {
 type ChannelsResponse struct {
 	Channels []Channel `json:"channels"`
 }
+
+type UpdateChannelRequest struct {
+	Name string `json:"name"`
+}

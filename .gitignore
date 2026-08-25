@@ -1,41 +1,64 @@
-# Go build output
-/bin/
-/build/
-/dist/
+```gitignore
+# =========================
+# Go
+# =========================
 
-# Go binaries
-*.exe
-*.exe~
-*.dll
-*.so
-*.dylib
-*.test
+# Binaries
+backend/bin/
+backend/*.exe
+backend/*.exe~
+backend/*.dll
+backend/*.so
+backend/*.dylib
+
+# Go test binaries
+backend/*.test
 
 # Coverage
-*.out
-coverage.html
-coverage.out
+backend/coverage.out
+backend/coverage.html
 
-# SQLite database
-*.db
-*.db-shm
-*.db-wal
-*.sqlite
-*.sqlite3
+# Environment files
+backend/.env
+backend/.env.*
 
-# Environment / secrets
-.env
-.env.*
-!.env.example
+# SQLite / local database files
+backend/*.db
+backend/*.sqlite
+backend/*.sqlite3
 
-# IDE / editor
+
+# =========================
+# React / Node
+# =========================
+
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# Environment files
+frontend/.env
+frontend/.env.*
+!frontend/.env.example
+
+# Logs
+frontend/npm-debug.log*
+frontend/yarn-debug.log*
+frontend/yarn-error.log*
+frontend/pnpm-debug.log*
+frontend/*.log
+
+
+# =========================
+# Editors / OS
+# =========================
+
 .vscode/
 .idea/
 
-# OS files
 .DS_Store
 Thumbs.db
-
-# Temporary files
-*.tmp
-*.temp
+*.swp
+*.swo
+*~
+```
