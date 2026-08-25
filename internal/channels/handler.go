@@ -63,14 +63,14 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	member, err := h.serverRepo.IsMember(userID, serverID)
+	allowed, err := h.serverRepo.HasAdminPermission(userID, serverID)
 	if err != nil {
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 
-	if !member {
-		http.Error(w, "You are not a member of this server", http.StatusForbidden)
+	if !allowed {
+		http.Error(w, "You do not have permission to create channels", http.StatusForbidden)
 		return
 	}
 

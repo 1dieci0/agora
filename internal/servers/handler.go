@@ -185,8 +185,6 @@ func (h *Handler) GetMembers(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// }
-
 func (h *Handler) Leave(w http.ResponseWriter, r *http.Request) {
 	serverID, err := strconv.Atoi(r.PathValue("id"))
 	if err != nil {
@@ -340,4 +338,197 @@ func (h *Handler) JoinInvite(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(response); err != nil {
 		return
 	}
+}
+
+func (h *Handler) UpdateMemberRole(w http.ResponseWriter, r *http.Request) {
+	serverID, err := strconv.Atoi(r.PathValue("id"))
+	if err != nil {
+		http.Error(w, "Invalid server ID", http.StatusBadRequest)
+		return
+	}
+
+	targetUserID, err := strconv.Atoi(r.PathValue("userID"))
+	if err != nil {
+		http.Error(w, "Invalid user ID", http.StatusBadRequest)
+		return
+	}
+
+	userID, ok := users.UserIDFromContext(r.Context())
+	if !ok {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	var data UpdateMemberRoleRequest
+
+	if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
+		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	if data.Role != RoleAdmin && data.Role != RoleMember {
+		http.Error(
+			w,
+			"Role must be admin or member",
+			http.StatusBadRequest,
+		)
+		return
+	}
+
+	// The person making the request must be an owner.
+	requesterRole, err := h.repo.GetMemberRole(userID, serverID)
+
+	if err == sql.ErrNoRows {
+		http.Error(w, "Server not found", http.StatusNotFound)
+		return
+	}
+
+	if err != nil {
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	if requesterRole != RoleOwner {
+		http.Error(
+			w,
+			"Only the server owner can change member roles",
+			http.StatusForbidden,
+		)
+		return
+	}
+
+	// Make sure the target user is actually a member.
+	targetRole, err := h.repo.GetMemberRole(targetUserID, serverID)
+
+	if err == sql.ErrNoRows {
+		http.Error(w, "Member not found", http.StatusNotFound)
+		return
+	}
+
+	if err != nil {
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	// The owner cannot be changed through this endpoint.
+	if targetRole == RoleOwner {
+		http.Error(
+			w,
+			"The server owner cannot be changed",
+			http.StatusForbidden,
+		)
+		return
+	}
+
+	if err := h.repo.UpdateMemberRole(
+		serverID,
+		targetUserID,
+		data.Role,
+	); err != nil {
+		http.Error(
+			w,
+			"Could not update member role",
+			http.StatusInternalServerError,
+		)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) RemoveMember(w http.ResponseWriter, r *http.Request) {
+	serverID, err := strconv.Atoi(r.PathValue("id"))
+	if err != nil {
+		http.Error(w, "Invalid server ID", http.StatusBadRequest)
+		return
+	}
+
+	targetUserID, err := strconv.Atoi(r.PathValue("userID"))
+	if err != nil {
+		http.Error(w, "Invalid user ID", http.StatusBadRequest)
+		return
+	}
+
+	userID, ok := users.UserIDFromContext(r.Context())
+	if !ok {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	// Get the role of the person making the request.
+	requesterRole, err := h.repo.GetMemberRole(userID, serverID)
+
+	if err == sql.ErrNoRows {
+		http.Error(w, "Server not found", http.StatusNotFound)
+		return
+	}
+
+	if err != nil {
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	// Get the role of the person being removed.
+	targetRole, err := h.repo.GetMemberRole(targetUserID, serverID)
+
+	if err == sql.ErrNoRows {
+		http.Error(w, "Member not found", http.StatusNotFound)
+		return
+	}
+
+	if err != nil {
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	// The owner cannot be removed.
+	if targetRole == RoleOwner {
+		http.Error(
+			w,
+			"The server owner cannot be removed",
+			http.StatusForbidden,
+		)
+		return
+	}
+
+	// Owner can remove anyone except the owner.
+	if requesterRole == RoleOwner {
+		// Allowed.
+	} else if requesterRole == RoleAdmin {
+		// Admins can only remove regular members.
+		if targetRole != RoleMember {
+			http.Error(
+				w,
+				"Admins can only remove members",
+				http.StatusForbidden,
+			)
+			return
+		}
+	} else {
+		http.Error(
+			w,
+			"You do not have permission to remove members",
+			http.StatusForbidden,
+		)
+		return
+	}
+
+	removed, err := h.repo.RemoveMember(serverID, targetUserID)
+
+	if err != sql.ErrNoRows || !removed {
+		http.Error(w, "Member not found", http.StatusNotFound)
+		return
+	}
+
+	if err != nil {
+
+		http.Error(
+			w,
+			"Could not remove member",
+			http.StatusInternalServerError,
+		)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }

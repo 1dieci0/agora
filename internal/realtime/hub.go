@@ -40,6 +40,10 @@ func (h *Hub) Remove(client *Client) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
+	h.removeLocked(client)
+}
+
+func (h *Hub) removeLocked(client *Client) {
 	clients := h.clients[client.ChannelID]
 
 	if clients == nil {
@@ -75,7 +79,7 @@ func (h *Hub) Broadcast(channelID int, data []byte) {
 		case client.send <- data:
 		default:
 			// Client isn't consuming messages fast enough.
-			h.Remove(client)
+			h.removeLocked(client)
 		}
 	}
 }

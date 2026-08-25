@@ -22,6 +22,7 @@ type ServersResponse struct {
 type Member struct {
 	ID       int    `json:"id"`
 	Username string `json:"username"`
+	Role     Role   `json:"role"`
 }
 
 type MembersResponse struct {
@@ -41,4 +42,16 @@ type Channel struct {
 
 type ChannelsResponse struct {
 	Channels []Channel `json:"channels"`
+}
+
+type Role string
+
+const (
+	RoleOwner  Role = "owner"
+	RoleAdmin  Role = "admin"
+	RoleMember Role = "member"
+)
+
+type UpdateMemberRoleRequest struct {
+	Role Role `json:"role"`
 }

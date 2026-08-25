@@ -12,21 +12,6 @@ func NewRepository(db *sql.DB) *Repository {
 	}
 }
 
-// func (r *Repository) Create(name string, ownerID int) (int64, error) {
-// 	result, err := r.db.Exec(
-// 		`INSERT INTO servers (name, owner_id)
-// 		 VALUES (?, ?)`,
-// 		name,
-// 		ownerID,
-// 	)
-
-// 	if err != nil {
-// 		return 0, err
-// 	}
-
-// 	return result.LastInsertId()
-// }
-
 func (r *Repository) Create(name string, ownerID int) (int64, error) {
 	tx, err := r.db.Begin()
 	if err != nil {
@@ -45,7 +30,7 @@ func (r *Repository) Create(name string, ownerID int) (int64, error) {
 		return 0, err
 	}
 
-	_, err = tx.Exec(`INSERT INTO server_members (server_id, user_id) VALUES (?, ?)`, serverID, ownerID)
+	_, err = tx.Exec(`INSERT INTO server_members (server_id, user_id, role) VALUES (?, ?, 'owner')`, serverID, ownerID)
 	if err != nil {
 		tx.Rollback()
 		return 0, err
@@ -123,8 +108,8 @@ func (r *Repository) GetByUserID(userID int) ([]Server, error) {
 
 func (r *Repository) AddMember(userID, serverID int) error {
 	_, err := r.db.Exec(
-		`INSERT INTO server_members (server_id, user_id)
-		 VALUES (?, ?)`,
+		`INSERT OR IGNORE INTO server_members (server_id, user_id, role)
+		 VALUES (?, ?, 'member')`,
 		serverID,
 		userID,
 	)
@@ -149,15 +134,28 @@ func (r *Repository) RemoveMember(userID, serverID int) (bool, error) {
 		return false, err
 	}
 
+	if rows == 0 {
+		return false, sql.ErrNoRows
+	}
+
 	return rows > 0, nil
 }
 
 func (r *Repository) GetMembers(serverID int) ([]Member, error) {
-	rows, err := r.db.Query(`SELECT u.id, u.username FROM users u JOIN server_members sm ON sm.user_id = u.id WHERE sm.server_id = ? ORDER BY u.username`, serverID)
+	rows, err := r.db.Query(
+		`SELECT 
+			u.id,
+			u.username,
+			sm.role 
+		FROM users u 
+		JOIN server_members sm 
+			ON sm.user_id = u.id 
+		WHERE sm.server_id = ? ORDER BY u.username`,
+		serverID,
+	)
 	if err != nil {
 		return nil, err
 	}
-
 	defer rows.Close()
 
 	members := make([]Member, 0)
@@ -165,7 +163,11 @@ func (r *Repository) GetMembers(serverID int) ([]Member, error) {
 	for rows.Next() {
 
 		var member Member
-		if err := rows.Scan(&member.ID, &member.Username); err != nil {
+		if err := rows.Scan(
+			&member.ID,
+			&member.Username,
+			&member.Role,
+		); err != nil {
 			return nil, err
 		}
 
@@ -189,4 +191,57 @@ func (r *Repository) GetServerIDByInviteCode(code string) (int, error) {
 	err := r.db.QueryRow(`SELECT server_id FROM invites WHERE code = ?`, code).Scan(&serverID)
 
 	return serverID, err
+}
+
+func (r *Repository) GetMemberRole(userID, serverID int) (Role, error) {
+	var role Role
+
+	err := r.db.QueryRow(
+		`SELECT role
+		 FROM server_members
+		 WHERE server_id = ?
+		 AND user_id = ?`,
+		serverID,
+		userID,
+	).Scan(&role)
+
+	return role, err
+}
+
+func (r *Repository) IsOwner(userID, serverID int) (bool, error) {
+	role, err := r.GetMemberRole(userID, serverID)
+
+	if err != nil {
+		return false, err
+	}
+
+	return role == RoleOwner, err
+}
+
+func (r *Repository) HasAdminPermission(userID, serverID int) (bool, error) {
+	role, err := r.GetMemberRole(userID, serverID)
+
+	if err != nil {
+		return false, err
+	}
+
+	return role == RoleOwner || role == RoleAdmin, err
+}
+
+func (r *Repository) UpdateMemberRole(
+	serverID int,
+	userID int,
+	role Role,
+) error {
+	_, err := r.db.Exec(
+		`UPDATE server_members
+		 SET role = ?
+		 WHERE server_id = ?
+		 AND user_id = ?`,
+		role,
+		serverID,
+		userID,
+	)
+
+	return err
 }

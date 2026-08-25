@@ -46,11 +46,14 @@ func SetupDatabase(db *sql.DB) error {
 		CREATE TABLE IF NOT EXISTS server_members (
 			server_id INTEGER NOT NULL,
 			user_id INTEGER NOT NULL,
+			role TEXT NOT NULL DEFAULT 'member',
 
 			PRIMARY KEY (server_id, user_id),
 
 			FOREIGN KEY (server_id) REFERENCES servers(id),
-			FOREIGN KEY (user_id) REFERENCES users(id)
+			FOREIGN KEY (user_id) REFERENCES users(id),
+
+			CHECK (role IN ('owner', 'admin', 'member'))
 		);
 
 		CREATE TABLE IF NOT EXISTS invites (

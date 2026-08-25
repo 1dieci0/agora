@@ -103,6 +103,11 @@ func (app *App) RegisterRoutes() {
 		app.users.RequireAuth(app.users.GetMe),
 	)
 
+	app.router.HandleFunc(
+		"PATCH /api/servers/{id}/members/{userID}",
+		app.users.RequireAuth(app.servers.UpdateMemberRole),
+	)
+
 	//servers
 
 	app.router.HandleFunc(
