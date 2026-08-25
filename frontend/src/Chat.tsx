@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
-import { getChannels, getServers } from "./api";
+import { getChannels, getServers, createServer, createChannel} from "./api";
 import type { Channel, Server, User } from "./types";
 import ServerSidebar from "./ServerSidebar";
 import ChannelSidebar from "./ChannelSidebar";
 import ChatWindow from "./ChatWindow";
+import CreateServerModal from "./CreateServerModal";
+import CreateChannelModal from "./CreateChannelModal";
 
 type ChatProps = {
   user: User;
@@ -13,6 +15,8 @@ type ChatProps = {
 function Chat({ user, onLogout }: ChatProps) {
   const [servers, setServers] = useState<Server[]>([]);
   const [channels, setChannels] = useState<Channel[]>([]);
+  const [showCreateServer, setShowCreateServer] = useState(false);
+  const [showCreateChannel, setShowCreateChannel] = useState(false);
 
   const [selectedServerId, setSelectedServerId] =
     useState<number | null>(null);
@@ -68,12 +72,40 @@ function Chat({ user, onLogout }: ChatProps) {
     loadChannels();
   }, [selectedServerId]);
 
+
+  async function handleCreateServer(name: string) {
+    const server = await createServer(name);
+
+    setServers((currentServers) => [ ...currentServers, server, ]);
+
+    setSelectedServerId(server.id); 
+  }
+
   function handleSelectServer(serverID: number) {
     setSelectedServerId(serverID);
   }
 
   function handleSelectChannel(channelID: number) {
     setSelectedChannelId(channelID);
+  }
+
+  async function handleCreateChannel( name: string, type: "text" | "voice", ) {
+
+    if (selectedServerId === null) {
+      return; 
+    }
+
+    const channel = await createChannel( 
+      selectedServerId, 
+      name, 
+      type,
+    );
+
+    setChannels((currentChannels) => [ 
+      ...currentChannels, channel, 
+    ]);
+
+    setSelectedChannelId(channel.id); 
   }
 
   const selectedChannel =
@@ -87,19 +119,38 @@ function Chat({ user, onLogout }: ChatProps) {
         servers={servers}
         selectedServerId={selectedServerId}
         onSelectServer={handleSelectServer}
-        //onLogout={onLogout}
+        onLogout={onLogout}
+        onCreateServer={() => setShowCreateServer(true)}
       />
 
       <ChannelSidebar
         channels={channels}
         selectedChannelId={selectedChannelId}
         onSelectChannel={handleSelectChannel}
+        onCreateChannel={() => setShowCreateChannel(true)}
       />
 
       <ChatWindow
         user={user}
         channel={selectedChannel}
       />
+
+      {showCreateServer && (
+        <CreateServerModal
+          onClose={() => setShowCreateServer(false)}
+          onCreate={handleCreateServer}
+        />
+      )}
+
+      {showCreateChannel && (
+        <CreateChannelModal
+          onClose={() => setShowCreateChannel(false)}
+          onCreate={handleCreateChannel}
+        />
+      )}
+
+
+
     </div>
   );
 }

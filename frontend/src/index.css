@@ -114,9 +114,7 @@ body {
   background: #4b5563;
 }
 
-.add-server {
-  margin-top: auto;
-}
+
 
 
 .channel-sidebar {
@@ -378,5 +376,102 @@ body {
 .message-form button {
   align-self: flex-end;
   height: 44px;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  background: rgba(0, 0, 0, 0.6);
+}
+
+.modal {
+  width: 420px;
+  max-width: calc(100vw - 32px);
+
+  padding: 24px;
+  box-sizing: border-box;
+
+  border-radius: 8px;
+  background: #1f2937;
+  color: white;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.modal-header h2 {
+  margin: 0;
+}
+
+.modal-header button {
+  border: none;
+  background: transparent;
+  color: #9ca3af;
+  font-size: 24px;
+  cursor: pointer;
+}
+
+.modal-description {
+  color: #9ca3af;
+}
+
+.modal label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 14px;
+}
+
+.modal input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px;
+
+  border: none;
+  border-radius: 6px;
+
+  background: #374151;
+  color: white;
+
+  outline: none;
+}
+
+.modal-error {
+  color: #ef4444;
+  font-size: 14px;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+.modal-actions button {
+  padding: 8px 14px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.create-server-button {
+  width: 48px;
+  height: 48px;
+  margin: 8px auto;
+
+  border: none;
+  border-radius: 50%;
+
+  font-size: 24px;
+  cursor: pointer;
 }
 

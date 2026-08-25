@@ -162,3 +162,55 @@ export async function deleteMessage(messageID: number): Promise<void> {
     throw new Error("Could not delete message");
   }
 }
+
+
+export async function createServer(name: string): Promise<Server> {
+  const response = await fetch(`${API_URL}/api/servers`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    credentials: "include",
+    body: JSON.stringify({
+      name,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error("Could not create server");
+  }
+
+  const data = await response.json();
+
+  return data.server;
+}
+
+
+export async function createChannel(
+  serverID: number,
+  name: string,
+  type: "text" | "voice",
+): Promise<Channel> {
+  const response = await fetch(
+    `${API_URL}/api/servers/${serverID}/channels`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      credentials: "include",
+      body: JSON.stringify({
+        name,
+        type,
+      }),
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error("Could not create channel");
+  }
+
+  const data = await response.json();
+
+  return data.channel;
+}

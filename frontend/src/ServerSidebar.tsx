@@ -3,13 +3,17 @@ import type { Server } from "./types";
 type ServerSidebarProps = {
   servers: Server[];
   selectedServerId: number | null;
-  onSelectServer: (serverId: number) => void;
+  onSelectServer: (serverID: number) => void;
+  onLogout: () => void;
+  onCreateServer: () => void;
 };
 
 function ServerSidebar({
   servers,
   selectedServerId,
   onSelectServer,
+  onLogout,
+  onCreateServer,
 }: ServerSidebarProps) {
   return (
     <aside className="server-sidebar">
@@ -29,9 +33,14 @@ function ServerSidebar({
         ))}
       </div>
 
-      <button className="server-button add-server">
+      <button
+        type="button"
+        className="create-server-button"
+        onClick={onCreateServer}
+      >
         +
       </button>
+
     </aside>
   );
 }
