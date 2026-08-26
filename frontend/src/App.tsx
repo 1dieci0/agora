@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import Login from "./Login";
 import Chat from "./Chat";
-import { getMe } from "./api";
+import { getMe, logout} from "./api";
 import type { User } from "./types";
 
 function App() {
@@ -23,6 +23,15 @@ function App() {
     checkAuth();
   }, []);
 
+  async function handleLogout() {
+    try {
+      await logout();
+      setUser(null);
+    } catch (error) {
+      console.error("Logout failed:", error);
+    }
+  }
+
   if (loading) {
     return <p>Loading...</p>;
   }
@@ -31,7 +40,10 @@ function App() {
     return <Login onLogin={setUser} />;
   }
 
-  return <Chat user={user} />;
+  return <Chat
+    user={user}
+    onLogout={handleLogout}
+  />
 }
 
 export default App;

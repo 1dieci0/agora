@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
-import { getChannels, getServers, createServer, createChannel} from "./api";
+import { getChannels, getServers, createServer, createChannel, createInvite, joinServer} from "./api";
 import type { Channel, Server, User } from "./types";
 import ServerSidebar from "./ServerSidebar";
 import ChannelSidebar from "./ChannelSidebar";
 import ChatWindow from "./ChatWindow";
 import CreateServerModal from "./CreateServerModal";
 import CreateChannelModal from "./CreateChannelModal";
+import InviteModal from "./InviteModal";
+import JoinServerModal from "./JoinServerModal";
 
 type ChatProps = {
   user: User;
@@ -17,6 +19,8 @@ function Chat({ user, onLogout }: ChatProps) {
   const [channels, setChannels] = useState<Channel[]>([]);
   const [showCreateServer, setShowCreateServer] = useState(false);
   const [showCreateChannel, setShowCreateChannel] = useState(false);
+  const [showInvite, setShowInvite] = useState(false);
+  const [showJoinServer, setShowJoinServer] = useState(false);
 
   const [selectedServerId, setSelectedServerId] =
     useState<number | null>(null);
@@ -72,6 +76,30 @@ function Chat({ user, onLogout }: ChatProps) {
     loadChannels();
   }, [selectedServerId]);
 
+  async function handleJoinServer(code: string) {
+
+    const server = await joinServer(code);
+
+    setServers((currentServers) => { 
+      const alreadyExists = currentServers.some(
+        (currentServer) => currentServer.id === server.id, 
+      );
+
+    if (alreadyExists) { 
+      return currentServers; 
+    } 
+
+    return [ ...currentServers, server]; 
+    }); 
+
+    setSelectedServerId(server.id); 
+  }
+
+  async function handleCreateInvite(
+    serverID: number,
+  ) {
+    return createInvite(serverID);
+  }
 
   async function handleCreateServer(name: string) {
     const server = await createServer(name);
@@ -121,6 +149,7 @@ function Chat({ user, onLogout }: ChatProps) {
         onSelectServer={handleSelectServer}
         onLogout={onLogout}
         onCreateServer={() => setShowCreateServer(true)}
+        onJoinServer={() => setShowJoinServer(true)}
       />
 
       <ChannelSidebar
@@ -128,6 +157,8 @@ function Chat({ user, onLogout }: ChatProps) {
         selectedChannelId={selectedChannelId}
         onSelectChannel={handleSelectChannel}
         onCreateChannel={() => setShowCreateChannel(true)}
+        onInvite={() => setShowInvite(true)}
+        serverId={selectedServerId}
       />
 
       <ChatWindow
@@ -149,6 +180,20 @@ function Chat({ user, onLogout }: ChatProps) {
         />
       )}
 
+      {showInvite && selectedServerId !== null && (
+        <InviteModal
+          serverID={selectedServerId}
+          onClose={() => setShowInvite(false)}
+          onCreateInvite={handleCreateInvite}
+        />
+      )}
+
+      {showJoinServer && (
+        <JoinServerModal
+          onClose={() => setShowJoinServer(false)}
+          onJoin={handleJoinServer}
+        />
+      )}
 
 
     </div>

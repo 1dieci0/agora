@@ -6,7 +6,9 @@ type ServerSidebarProps = {
   onSelectServer: (serverID: number) => void;
   onLogout: () => void;
   onCreateServer: () => void;
+  onJoinServer: () => void;
 };
+
 
 function ServerSidebar({
   servers,
@@ -14,6 +16,7 @@ function ServerSidebar({
   onSelectServer,
   onLogout,
   onCreateServer,
+  onJoinServer,
 }: ServerSidebarProps) {
   return (
     <aside className="server-sidebar">
@@ -39,6 +42,14 @@ function ServerSidebar({
         onClick={onCreateServer}
       >
         +
+      </button>
+
+      <button
+        type="button"
+        className="join-server-button"
+        onClick={onJoinServer}
+      >
+        ↗
       </button>
 
     </aside>

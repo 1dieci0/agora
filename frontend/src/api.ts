@@ -214,3 +214,56 @@ export async function createChannel(
 
   return data.channel;
 }
+
+
+export async function logout(): Promise<void> {
+  const response = await fetch(`${API_URL}/api/logout`, {
+    method: "POST",
+    credentials: "include",
+  });
+
+  if (!response.ok) {
+    throw new Error("Could not log out");
+  }
+}
+
+
+export async function createInvite(
+  serverID: number,
+): Promise<string> {
+  const response = await fetch(
+    `${API_URL}/api/servers/${serverID}/invites`,
+    {
+      method: "POST",
+      credentials: "include",
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error("Could not create invite");
+  }
+
+  const data = await response.json();
+
+  return data.code;
+}
+
+export async function joinServer(
+  code: string,
+): Promise<Server> {
+  const response = await fetch(
+    `${API_URL}/api/invites/${encodeURIComponent(code)}/join`,
+    {
+      method: "POST",
+      credentials: "include",
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error("Could not join server");
+  }
+
+  const data = await response.json();
+
+  return data.server;
+}

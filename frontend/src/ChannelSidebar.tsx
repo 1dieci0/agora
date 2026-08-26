@@ -5,6 +5,8 @@ type ChannelSidebarProps = {
   selectedChannelId: number | null;
   onSelectChannel: (channelID: number) => void;
   onCreateChannel: () => void;
+  serverId: number | null;
+  onInvite: () => void;
 };
 
 function ChannelSidebar({
@@ -12,12 +14,24 @@ function ChannelSidebar({
   selectedChannelId,
   onSelectChannel,
   onCreateChannel,
+  serverId,
+  onInvite,
 }: ChannelSidebarProps) {
   return (
     <aside className="channel-sidebar">
       <div className="channel-header">
         <h2>Channels</h2>
       </div>
+
+
+      <button
+        type="button"
+        onClick={onInvite}
+        disabled={serverId === null}
+      >
+        Invite People
+      </button>
+
       <button
         type="button"
         onClick={onCreateChannel}
