@@ -65,8 +65,25 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	userID := int(id)
+
+	sessionID, err := createSession(h.repo.db, userID)
+	if err != nil{
+		http.Error(w, "Could not create session", http.StatusInternalServerError)
+	}
+
+	http.SetCookie(w, &http.Cookie{ 
+		Name: "session", 
+		Value: sessionID, 
+		Path: "/", 
+		HttpOnly: true,
+		Secure: false,
+		SameSite: http.SameSiteLaxMode,
+		Expires: time.Now().Add(30 * 24 * time.Hour),
+	})
+
 	user := User{
-		ID:       int(id),
+		ID:       userID,
 		Username: data.Username,
 	}
 
