@@ -83,7 +83,7 @@ func (app *App) Router() http.Handler {
 func (app *App) RegisterRoutes() {
 	// Authentication
 	app.router.HandleFunc(
-		"/api/users",
+		"/api/register",
 		app.users.Register,
 	)
 

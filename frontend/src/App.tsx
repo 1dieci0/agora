@@ -3,10 +3,12 @@ import Login from "./Login";
 import Chat from "./Chat";
 import { getMe, logout} from "./api";
 import type { User } from "./types";
+import Signup from "./Signup";
 
 function App() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [showSignup, setShowSignup] = useState(false);
 
   useEffect(() => {
     async function checkAuth() {
@@ -37,7 +39,21 @@ function App() {
   }
 
   if (!user) {
-    return <Login onLogin={setUser} />;
+    if (showSignup) {
+      return (
+        <Signup
+          onSignup={setUser}
+          onLogin={() => setShowSignup(false)}
+        />
+      );
+    }
+
+    return (
+      <Login
+        onLogin={setUser}
+        onSignup={() => setShowSignup(true)}
+      />
+    );
   }
 
   return <Chat

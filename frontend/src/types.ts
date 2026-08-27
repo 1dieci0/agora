@@ -24,3 +24,9 @@ export type Message = {
   content: string;
   created_at: string;
 };
+
+export type Member = {
+  id: number;
+  username: string;
+  role: "owner" | "admin" | "member";
+};

@@ -1,4 +1,4 @@
-import type { Channel, Message, Server, User } from "./types";
+import type { Channel, Message, Server, User, Member } from "./types";
 
 const API_URL = "http://localhost:8080";
 
@@ -266,4 +266,51 @@ export async function joinServer(
   const data = await response.json();
 
   return data.server;
+}
+
+
+export async function getMembers(
+  serverID: number,
+): Promise<Member[]> {
+  const response = await fetch(
+    `${API_URL}/api/servers/${serverID}/members`,
+    {
+      credentials: "include",
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error("Could not load members");
+  }
+
+  const data = await response.json();
+
+  return data.members;
+}
+
+
+export async function register(
+  username: string,
+  password: string,
+): Promise<User> {
+  const response = await fetch(`${API_URL}/api/register`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    credentials: "include",
+    body: JSON.stringify({
+      username,
+      password,
+    }),
+  });
+
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(message || "Could not create account");
+  }
+
+  const data = await response.json();
+
+  return data.user;
 }

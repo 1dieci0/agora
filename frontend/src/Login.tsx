@@ -4,9 +4,10 @@ import type { User } from "./types";
 
 type LoginProps = {
   onLogin: (user: User) => void;
+  onSignup: () => void;
 };
 
-function Login({ onLogin }: LoginProps) {
+function Login({ onLogin, onSignup } : LoginProps) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -55,6 +56,17 @@ function Login({ onLogin }: LoginProps) {
         <button type="submit" disabled={loading}>
           {loading ? "Logging in..." : "Login"}
         </button>
+
+        <p className="auth-switch">
+          Don't have an account?{" "}
+          <button
+            type="button"
+            onClick={onSignup}
+          >
+            Sign up
+          </button>
+
+        </p>
       </form>
     </div>
   );

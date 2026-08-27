@@ -52,6 +52,16 @@ function ServerSidebar({
         ↗
       </button>
 
+      <div className="server-sidebar-footer">
+        <button
+          type="button"
+          onClick={onLogout}
+          className="logout-button"
+        >
+          Log out
+        </button>
+      </div>
+
     </aside>
   );
 }

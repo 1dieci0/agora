@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { getChannels, getServers, createServer, createChannel, createInvite, joinServer} from "./api";
-import type { Channel, Server, User } from "./types";
+import { getChannels, getServers, createServer, createChannel, createInvite, joinServer, getMembers} from "./api";
+import type { Channel, Server, User, Member } from "./types";
 import ServerSidebar from "./ServerSidebar";
 import ChannelSidebar from "./ChannelSidebar";
 import ChatWindow from "./ChatWindow";
@@ -8,6 +8,7 @@ import CreateServerModal from "./CreateServerModal";
 import CreateChannelModal from "./CreateChannelModal";
 import InviteModal from "./InviteModal";
 import JoinServerModal from "./JoinServerModal";
+import MembersSidebar from "./MembersSidebar";
 
 type ChatProps = {
   user: User;
@@ -21,6 +22,7 @@ function Chat({ user, onLogout }: ChatProps) {
   const [showCreateChannel, setShowCreateChannel] = useState(false);
   const [showInvite, setShowInvite] = useState(false);
   const [showJoinServer, setShowJoinServer] = useState(false);
+  const [members, setMembers] = useState<Member[]>([]);
 
   const [selectedServerId, setSelectedServerId] =
     useState<number | null>(null);
@@ -74,6 +76,32 @@ function Chat({ user, onLogout }: ChatProps) {
     }
 
     loadChannels();
+  }, [selectedServerId]);
+
+  useEffect(() => {
+    if (selectedServerId === null) {
+      setMembers([]);
+      return;
+    }
+
+    const serverID = selectedServerId;
+
+    async function loadMembers() {
+      try {
+        const members = await getMembers(serverID);
+
+        setMembers(members);
+      } catch (error) {
+        console.error(
+          "Could not load members:",
+          error,
+        );
+
+        setMembers([]);
+      }
+    }
+
+    loadMembers();
   }, [selectedServerId]);
 
   async function handleJoinServer(code: string) {
@@ -165,6 +193,8 @@ function Chat({ user, onLogout }: ChatProps) {
         user={user}
         channel={selectedChannel}
       />
+
+      <MembersSidebar members={members} />
 
       {showCreateServer && (
         <CreateServerModal
