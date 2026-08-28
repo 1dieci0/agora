@@ -250,3 +250,94 @@ func (h *Handler) GetMe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 }
+
+
+func (h *Handler) UploadAvatar(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPut {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	userID, ok := UserIDFromContext(r.Context())
+	if !ok {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	oldAvatarURL, err := h.repo.GetAvatarURL(userID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			http.Error(w, "User not found", http.StatusNotFound)
+			return
+		}
+
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, 5<<20)
+
+	if err := r.ParseMultipartForm(5 << 20); err != nil {
+		http.Error(w, "File too large or invalid upload", http.StatusBadRequest)
+		return
+	}
+
+	file, _, err := r.FormFile("avatar")
+	if err != nil {
+		http.Error(w, "Avatar is required", http.StatusBadRequest)
+		return
+	}
+	defer file.Close()
+
+	contentType, header, err := detectImageType(file)
+	if err != nil {
+		http.Error(w, "Could not read avatar", http.StatusBadRequest)
+		return
+	}
+
+	switch contentType {
+	case "image/jpeg", "image/png", "image/webp":
+	default:
+		http.Error(
+			w,
+			"Avatar must be a JPEG, PNG, or WebP image",
+			http.StatusBadRequest,
+		)
+		return
+	}
+
+	avatarURL, err := saveAvatar(file, header, contentType)
+	if err != nil {
+		http.Error(w, "Could not save avatar", http.StatusInternalServerError)
+		return
+	}
+
+	if err := h.repo.UpdateAvatar(userID, avatarURL); err != nil {
+		deleteAvatarFile(avatarURL)
+
+		http.Error(w, "Could not update avatar", http.StatusInternalServerError)
+		return
+	}
+
+	if oldAvatarURL != "" {
+		deleteAvatarFile(oldAvatarURL)
+	}
+
+	user, err := h.repo.GetByID(userID)
+	if err != nil {
+		http.Error(w, "Could not get user", http.StatusInternalServerError)
+		return
+	}
+
+	response := UserResponse{
+		Message: "Avatar updated",
+		User:    user,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		return
+	}
+}

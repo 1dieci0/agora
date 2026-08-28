@@ -26,7 +26,8 @@ func SetupDatabase(db *sql.DB) error {
 		CREATE TABLE IF NOT EXISTS users (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			username TEXT NOT NULL UNIQUE,
-			password_hash TEXT NOT NULL
+			password_hash TEXT NOT NULL,
+			avatar_url TEXT
 		);
 
 		CREATE TABLE IF NOT EXISTS sessions (

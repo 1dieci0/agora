@@ -108,6 +108,11 @@ func (app *App) RegisterRoutes() {
 		app.users.RequireAuth(app.servers.UpdateMemberRole),
 	)
 
+	app.router.HandleFunc(
+		"PUT /api/me/avatar",
+		app.users.RequireAuth(app.users.UploadAvatar),
+	)
+
 	//servers
 
 	app.router.HandleFunc(
@@ -198,5 +203,17 @@ func (app *App) RegisterRoutes() {
 	app.router.HandleFunc(
 		"GET /ws/channels/{channelID}",
 		app.users.RequireAuth(app.realtime.Connect),
+	)
+
+
+
+	//uploads
+
+	app.router.Handle(
+		"/uploads/",
+		http.StripPrefix(
+			"/uploads/",
+			http.FileServer(http.Dir("uploads")),
+		),
 	)
 }

@@ -1,6 +1,6 @@
 import type { Channel, Message, Server, User, Member } from "./types";
 
-const API_URL = "http://localhost:8080";
+export const API_URL = "http://localhost:8080";
 
 type LoginResponse = {
   message: string;
@@ -308,6 +308,33 @@ export async function register(
   if (!response.ok) {
     const message = await response.text();
     throw new Error(message || "Could not create account");
+  }
+
+  const data = await response.json();
+
+  return data.user;
+}
+
+export async function uploadAvatar(file: File): Promise<User> {
+  const formData = new FormData();
+
+  formData.append("avatar", file);
+
+  const response = await fetch(
+    `${API_URL}/api/me/avatar`,
+    {
+      method: "PUT",
+      credentials: "include",
+      body: formData,
+    },
+  );
+
+  if (!response.ok) {
+    const message = await response.text();
+
+    throw new Error(
+      message || "Could not upload avatar",
+    );
   }
 
   const data = await response.json();

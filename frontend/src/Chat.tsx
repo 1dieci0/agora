@@ -9,13 +9,16 @@ import CreateChannelModal from "./CreateChannelModal";
 import InviteModal from "./InviteModal";
 import JoinServerModal from "./JoinServerModal";
 import MembersSidebar from "./MembersSidebar";
+import UserPanel from "./UserPanel";
+import ProfileModal from "./ProfileModal";
 
 type ChatProps = {
   user: User;
   onLogout: () => void;
+  onUserUpdate: (user: User) => void;
 };
 
-function Chat({ user, onLogout }: ChatProps) {
+function Chat({ user, onLogout, onUserUpdate }: ChatProps) {
   const [servers, setServers] = useState<Server[]>([]);
   const [channels, setChannels] = useState<Channel[]>([]);
   const [showCreateServer, setShowCreateServer] = useState(false);
@@ -23,6 +26,7 @@ function Chat({ user, onLogout }: ChatProps) {
   const [showInvite, setShowInvite] = useState(false);
   const [showJoinServer, setShowJoinServer] = useState(false);
   const [members, setMembers] = useState<Member[]>([]);
+  const [showProfile, setShowProfile] = useState(false);
 
   const [selectedServerId, setSelectedServerId] =
     useState<number | null>(null);
@@ -180,14 +184,25 @@ function Chat({ user, onLogout }: ChatProps) {
         onJoinServer={() => setShowJoinServer(true)}
       />
 
-      <ChannelSidebar
-        channels={channels}
-        selectedChannelId={selectedChannelId}
-        onSelectChannel={handleSelectChannel}
-        onCreateChannel={() => setShowCreateChannel(true)}
-        onInvite={() => setShowInvite(true)}
-        serverId={selectedServerId}
-      />
+      <div className="channel-area">
+        {selectedServerId !== null && (
+          <ChannelSidebar
+            channels={channels}
+            selectedChannelId={selectedChannelId}
+            onSelectChannel={handleSelectChannel}
+            onCreateChannel={() => setShowCreateChannel(true)}
+            onInvite={() => setShowInvite(true)}
+            serverId={selectedServerId}
+          />
+        )}
+
+        <UserPanel
+          user={user}
+          onOpenProfile={() => setShowProfile(true)}
+          onLogout={onLogout}
+        />
+      </div>
+
 
       <ChatWindow
         user={user}
@@ -222,6 +237,14 @@ function Chat({ user, onLogout }: ChatProps) {
         <JoinServerModal
           onClose={() => setShowJoinServer(false)}
           onJoin={handleJoinServer}
+        />
+      )}
+
+      {showProfile && (
+        <ProfileModal
+          user={user}
+          onClose={() => setShowProfile(false)}
+          onUserUpdate={onUserUpdate}
         />
       )}
 

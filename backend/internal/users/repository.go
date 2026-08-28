@@ -62,13 +62,15 @@ func (r *Repository) GetByID(id int) (User, error) {
 	err := r.db.QueryRow(
 		`SELECT
 			id,
-			username
+			username,
+			avatar_url
 		FROM users
 		WHERE id = ?`,
 		id,
 	).Scan(
 		&user.ID,
 		&user.Username,
+		&user.AvatarURL,
 	)
 
 	return user, err
@@ -94,4 +96,40 @@ func (r *Repository) GetUserIDFromSession(sessionID string) (int, error) {
 	).Scan(&userID)
 
 	return userID, err
+}
+
+
+func (r *Repository) UpdateAvatar(userID int, avatarURL string) error {
+	_, err := r.db.Exec(
+		`UPDATE users
+		 SET avatar_url = ?
+		 WHERE id = ?`,
+		avatarURL,
+		userID,
+	)
+
+	return err
+}
+
+
+
+func (r *Repository) GetAvatarURL(userID int) (string, error) {
+	var avatarURL sql.NullString
+
+	err := r.db.QueryRow(
+		`SELECT avatar_url
+		 FROM users
+		 WHERE id = ?`,
+		userID,
+	).Scan(&avatarURL)
+
+	if err != nil {
+		return "", err
+	}
+
+	if !avatarURL.Valid {
+		return "", nil
+	}
+
+	return avatarURL.String, nil
 }
