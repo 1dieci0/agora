@@ -11,6 +11,7 @@ import JoinServerModal from "./JoinServerModal";
 import MembersSidebar from "./MembersSidebar";
 import UserPanel from "./UserPanel";
 import ProfileModal from "./ProfileModal";
+import VoiceConnection from "./VoiceConnection";
 
 type ChatProps = {
   user: User;
@@ -32,6 +33,9 @@ function Chat({ user, onLogout, onUserUpdate }: ChatProps) {
     useState<number | null>(null);
 
   const [selectedChannelId, setSelectedChannelId] =
+    useState<number | null>(null);
+
+  const [activeVoiceChannelId, setActiveVoiceChannelId] =
     useState<number | null>(null);
 
   useEffect(() => {
@@ -127,6 +131,7 @@ function Chat({ user, onLogout, onUserUpdate }: ChatProps) {
     setSelectedServerId(server.id); 
   }
 
+
   async function handleCreateInvite(
     serverID: number,
   ) {
@@ -139,6 +144,16 @@ function Chat({ user, onLogout, onUserUpdate }: ChatProps) {
     setServers((currentServers) => [ ...currentServers, server, ]);
 
     setSelectedServerId(server.id); 
+  }
+
+  function handleJoinVoiceChannel(channelId: number) {
+    setActiveVoiceChannelId((current) => {
+      if (current === channelId) {
+        return null;
+      }
+
+      return channelId;
+    });
   }
 
   function handleSelectServer(serverID: number) {
@@ -193,6 +208,8 @@ function Chat({ user, onLogout, onUserUpdate }: ChatProps) {
             onCreateChannel={() => setShowCreateChannel(true)}
             onInvite={() => setShowInvite(true)}
             serverId={selectedServerId}
+            activeVoiceChannelId={activeVoiceChannelId}
+            onJoinVoiceChannel={handleJoinVoiceChannel}
           />
         )}
 
@@ -245,6 +262,13 @@ function Chat({ user, onLogout, onUserUpdate }: ChatProps) {
           user={user}
           onClose={() => setShowProfile(false)}
           onUserUpdate={onUserUpdate}
+        />
+      )}
+
+      {activeVoiceChannelId !== null && (
+        <VoiceConnection
+          channelId={activeVoiceChannelId}
+          currentUserId={user.id}
         />
       )}
 

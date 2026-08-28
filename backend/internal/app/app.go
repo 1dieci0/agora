@@ -10,6 +10,7 @@ import (
 	"agora/internal/realtime"
 	"agora/internal/servers"
 	"agora/internal/users"
+	"agora/internal/voice"
 )
 
 type App struct {
@@ -19,8 +20,12 @@ type App struct {
 	servers  *servers.Handler
 	channels *channels.Handler
 	messages *messages.Handler
-	hub      *realtime.Hub
+
+	textHub      *realtime.Hub
 	realtime *realtime.Handler
+
+	voiceHub *voice.Hub
+	voice 	 *voice.Handler
 }
 
 func NewApp() (*App, error) {
@@ -36,6 +41,7 @@ func NewApp() (*App, error) {
 
 	//realtime
 	hub := realtime.NewHub()
+	voiceHub := voice.NewHub()
 	// Repositories
 	serverRepo := servers.NewRepository(db)
 	channelRepo := channels.NewRepository(db)
@@ -62,9 +68,12 @@ func NewApp() (*App, error) {
 			hub,
 		),
 
-		hub: hub,
+		textHub: hub,
 
 		realtime: realtime.NewHandler(channelRepo, serverRepo, hub),
+
+		voiceHub: voiceHub,
+		voice: voice.NewHandler(voiceHub, channelRepo, serverRepo),
 	}
 
 	app.RegisterRoutes()
@@ -215,5 +224,12 @@ func (app *App) RegisterRoutes() {
 			"/uploads/",
 			http.FileServer(http.Dir("uploads")),
 		),
+	)
+
+
+	//voice
+	app.router.HandleFunc(
+		"GET /ws/voice/{channelID}",
+		app.users.RequireAuth(app.voice.Connect),
 	)
 }

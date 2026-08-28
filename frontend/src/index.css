@@ -1030,3 +1030,93 @@ body {
 
   cursor: not-allowed;
 }
+
+.voice-channel {
+  width: 100%;
+
+  display: flex;
+  align-items: center;
+
+  gap: 8px;
+
+  padding: 7px 12px;
+
+  border: none;
+  border-radius: 5px;
+
+  background: transparent;
+
+  color: #aeb3c0;
+
+  cursor: pointer;
+
+  text-align: left;
+}
+
+.voice-channel:hover {
+  background: #242833;
+  color: #f3f4f6;
+}
+
+.voice-channel.active {
+  background: #2d333f;
+  color: #ffffff;
+}
+
+.voice-channel-name {
+  overflow: hidden;
+
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.voice-connection {
+  position: fixed;
+
+  bottom: 0;
+  left: 250px;
+
+  width: 240px;
+
+  padding: 10px;
+
+  background: #181b21;
+
+  border-top: 1px solid #2b303b;
+}
+
+.voice-connection-header {
+  display: flex;
+  align-items: center;
+
+  gap: 8px;
+
+  margin-bottom: 8px;
+
+  color: #8ee28e;
+
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.voice-connection-users {
+  display: flex;
+  flex-direction: column;
+
+  gap: 4px;
+}
+
+.voice-connection-user {
+  display: flex;
+  align-items: center;
+
+  gap: 6px;
+
+  color: #c4c8d0;
+
+  font-size: 13px;
+}
+
+.voice-user-status {
+  font-size: 9px;
+}
