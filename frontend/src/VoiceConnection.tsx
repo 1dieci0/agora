@@ -5,6 +5,7 @@ type VoiceConnectionProps = {
   currentUserId: number;
 };
 
+
 type SignalMessage = {
   type:
     | "user_joined"
@@ -13,11 +14,17 @@ type SignalMessage = {
     | "answer"
     | "ice_candidate";
 
+  // User who sent the message.
   user_id?: number | string;
-  from?: number | string;
-  to?: number | string;
+
+  // Target user for signaling messages.
+  target_user_id?: number | string;
+
+  // WebRTC SDP.
   sdp?: string;
-  candidate?: RTCIceCandidateInit | string | null;
+
+  // WebRTC ICE candidate.
+  candidate?: string;
 };
 
 type Peer = {
@@ -49,7 +56,8 @@ export default function VoiceConnection({
   channelId,
   currentUserId,
 }: VoiceConnectionProps) {
-  const wsRef = useRef<WebSocket | null>(null);
+
+  let ws: WebSocket | null = null;
 
   const localStreamRef =
     useRef<MediaStream | null>(null);
@@ -60,11 +68,6 @@ export default function VoiceConnection({
   const generationRef =
     useRef(0);
 
-  const outgoingQueueRef =
-    useRef<string[]>([]);
-
-  const cancelledRef =
-    useRef(false);
 
   useEffect(() => {
     const generation =
@@ -72,7 +75,6 @@ export default function VoiceConnection({
 
     let cancelled = false;
 
-    cancelledRef.current = false;
 
     console.log(
       "================================================"
@@ -114,24 +116,6 @@ export default function VoiceConnection({
       return id;
     }
 
-    function getRemoteUserId(
-      message: SignalMessage
-    ): number | null {
-      if (
-        message.type ===
-          "user_joined" ||
-        message.type ===
-          "user_left"
-      ) {
-        return toUserId(
-          message.user_id
-        );
-      }
-
-      return toUserId(
-        message.from
-      );
-    }
 
     /*
      * ------------------------------------------------------------
@@ -139,102 +123,32 @@ export default function VoiceConnection({
      * ------------------------------------------------------------
      */
 
-    function sendSignal(
-      message: Record<string, unknown>
-    ) {
-      const ws =
-        wsRef.current;
-
-      const serialized =
-        JSON.stringify(message);
+    function sendSignal(message: Record<string, unknown>) {
 
       if (!ws) {
         console.warn(
-          "VOICE: websocket doesn't exist; queueing",
+          "VOICE: cannot send signal; websocket doesn't exist",
           message
         );
-
-        outgoingQueueRef.current.push(
-          serialized
-        );
-
         return;
       }
 
-      if (
-        ws.readyState ===
-        WebSocket.OPEN
-      ) {
-        console.log(
-          "VOICE SIGNAL SEND:",
-          message
+      if (ws.readyState !== WebSocket.OPEN) {
+        console.warn(
+          "VOICE: cannot send signal; websocket isn't open",
+          {
+            readyState: ws.readyState,
+            message,
+          }
         );
-
-        ws.send(serialized);
-
         return;
       }
 
-      if (
-        ws.readyState ===
-        WebSocket.CONNECTING
-      ) {
-        console.log(
-          "VOICE: websocket connecting; queueing",
-          message
-        );
+      console.log("VOICE SIGNAL SEND:", message);
 
-        outgoingQueueRef.current.push(
-          serialized
-        );
-
-        return;
-      }
-
-      console.warn(
-        "VOICE: websocket unavailable",
-        {
-          readyState:
-            ws.readyState,
-          message,
-        }
-      );
+      ws.send(JSON.stringify(message));
     }
 
-    function flushOutgoingQueue() {
-      const ws =
-        wsRef.current;
-
-      if (
-        !ws ||
-        ws.readyState !==
-          WebSocket.OPEN
-      ) {
-        return;
-      }
-
-      while (
-        outgoingQueueRef.current
-          .length > 0
-      ) {
-        const serialized =
-          outgoingQueueRef.current.shift();
-
-        if (!serialized) {
-          continue;
-        }
-
-        const message =
-          JSON.parse(serialized);
-
-        console.log(
-          "VOICE: flushing queued signal",
-          message
-        );
-
-        ws.send(serialized);
-      }
-    }
 
     /*
      * ------------------------------------------------------------
@@ -255,10 +169,7 @@ export default function VoiceConnection({
       pc: RTCPeerConnection,
       remoteUserId: number
     ): Promise<void> {
-      if (
-        pc.iceGatheringState ===
-        "complete"
-      ) {
+      if (pc.iceGatheringState === "complete") {
         console.log(
           "VOICE: ICE already complete",
           remoteUserId
@@ -267,57 +178,59 @@ export default function VoiceConnection({
         return Promise.resolve();
       }
 
-      return new Promise(
-        (resolve) => {
-          const timeout =
-            window.setTimeout(() => {
-              console.warn(
-                "VOICE: ICE gathering timeout",
-                {
-                  remoteUserId,
-                  state:
-                    pc.iceGatheringState,
-                }
-              );
+      return new Promise((resolve) => {
+        let finished = false;
 
-              resolve();
-            }, 5000);
+        const finish = () => {
+          if (finished) {
+            return;
+          }
 
-          const check = () => {
-            console.log(
-              "VOICE: ICE GATHERING STATE",
-              {
-                remoteUserId,
-                state:
-                  pc.iceGatheringState,
-              }
-            );
+          finished = true;
 
-            if (
-              pc.iceGatheringState ===
-              "complete"
-            ) {
-              window.clearTimeout(
-                timeout
-              );
+          window.clearTimeout(timeout);
 
-              pc.removeEventListener(
-                "icegatheringstatechange",
-                check
-              );
-
-              resolve();
-            }
-          };
-
-          pc.addEventListener(
+          pc.removeEventListener(
             "icegatheringstatechange",
             check
           );
 
-          check();
-        }
-      );
+          resolve();
+        };
+
+        const check = () => {
+          console.log(
+            "VOICE: ICE GATHERING STATE",
+            {
+              remoteUserId,
+              state: pc.iceGatheringState,
+            }
+          );
+
+          if (pc.iceGatheringState === "complete") {
+            finish();
+          }
+        };
+
+        const timeout = window.setTimeout(() => {
+          console.warn(
+            "VOICE: ICE gathering timeout",
+            {
+              remoteUserId,
+              state: pc.iceGatheringState,
+            }
+          );
+
+          finish();
+        }, 5000);
+
+        pc.addEventListener(
+          "icegatheringstatechange",
+          check
+        );
+
+        check();
+      });
     }
 
     /*
@@ -822,8 +735,8 @@ export default function VoiceConnection({
 
         sendSignal({
           type: "offer",
-          from: currentUserId,
-          to: remoteUserId,
+          user_id: currentUserId,
+          target_user_id: remoteUserId,
           sdp,
         });
       } catch (error) {
@@ -976,8 +889,8 @@ export default function VoiceConnection({
 
         sendSignal({
           type: "answer",
-          from: currentUserId,
-          to: remoteUserId,
+          user_id: currentUserId,
+          target_user_id: remoteUserId,
           sdp: finalSdp,
         });
 
@@ -1371,13 +1284,11 @@ export default function VoiceConnection({
        * WebSocket.
        */
 
-      const ws =
+      ws =
         new WebSocket(
           `ws://localhost:8080/ws/voice/${channelId}`
         );
 
-      wsRef.current =
-        ws;
 
       ws.onopen = () => {
         if (
@@ -1395,7 +1306,7 @@ export default function VoiceConnection({
           }
         );
 
-        flushOutgoingQueue();
+        // flushOutgoingQueue();
       };
 
       ws.onerror = (
@@ -1454,10 +1365,7 @@ export default function VoiceConnection({
                */
 
               case "user_joined": {
-                const remoteUserId =
-                  getRemoteUserId(
-                    message
-                  );
+                const remoteUserId = toUserId(message.user_id)
 
                 if (
                   remoteUserId ===
@@ -1490,10 +1398,7 @@ export default function VoiceConnection({
                */
 
               case "offer": {
-                const remoteUserId =
-                  getRemoteUserId(
-                    message
-                  );
+                const remoteUserId = toUserId(message.user_id)
 
                 if (
                   remoteUserId ===
@@ -1523,10 +1428,7 @@ export default function VoiceConnection({
                */
 
               case "answer": {
-                const remoteUserId =
-                  getRemoteUserId(
-                    message
-                  );
+                const remoteUserId = toUserId(message.user_id)
 
                 if (
                   remoteUserId ===
@@ -1577,10 +1479,7 @@ export default function VoiceConnection({
                */
 
               case "user_left": {
-                const remoteUserId =
-                  getRemoteUserId(
-                    message
-                  );
+                const remoteUserId = toUserId(message)
 
                 if (
                   remoteUserId !==
@@ -1619,13 +1518,6 @@ export default function VoiceConnection({
      */
 
     return () => {
-      if (
-        generation !==
-        generationRef.current
-      ) {
-        return;
-      }
-
       console.log(
         "VOICE: CLEANUP",
         {
@@ -1637,8 +1529,6 @@ export default function VoiceConnection({
 
       cancelled = true;
 
-      cancelledRef.current =
-        true;
 
       /*
        * Close peers.
@@ -1703,20 +1593,14 @@ export default function VoiceConnection({
        * Close WebSocket.
        */
 
-      const ws =
-        wsRef.current;
 
       if (ws) {
         try {
           ws.close();
         } catch {}
 
-        wsRef.current =
-          null;
       }
 
-      outgoingQueueRef.current =
-        [];
     };
   }, [
     channelId,
