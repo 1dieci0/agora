@@ -59,11 +59,9 @@ export default function VoiceConnection({
 
   let ws: WebSocket | null = null;
 
-  const localStreamRef =
-    useRef<MediaStream | null>(null);
+  let localStream: MediaStream | null = null;
 
-  const peersRef =
-    useRef<Map<number, Peer>>(new Map());
+  const peers = new Map<number, Peer>();
 
   const generationRef =
     useRef(0);
@@ -243,14 +241,14 @@ export default function VoiceConnection({
       remoteUserId: number
     ): Peer {
       const existing =
-        peersRef.current.get(
+        peers.get(
           remoteUserId
         );
 
       if (
         existing &&
-        existing.pc.connectionState !==
-          "closed"
+        existing.pc.connectionState !== "closed" &&
+        existing.pc.connectionState !== "failed"
       ) {
         return existing;
       }
@@ -267,7 +265,7 @@ export default function VoiceConnection({
           existing.audio.remove();
         } catch {}
 
-        peersRef.current.delete(
+        peers.delete(
           remoteUserId
         );
       }
@@ -318,8 +316,6 @@ export default function VoiceConnection({
        * ----------------------------------------------------------
        */
 
-      const localStream =
-        localStreamRef.current;
 
       if (!localStream) {
         throw new Error(
@@ -597,7 +593,7 @@ export default function VoiceConnection({
         remoteStream,
       };
 
-      peersRef.current.set(
+      peers.set(
         remoteUserId,
         peer
       );
@@ -921,7 +917,7 @@ export default function VoiceConnection({
     ) {
       try {
         const peer =
-          peersRef.current.get(
+          peers.get(
             remoteUserId
           );
 
@@ -1013,7 +1009,7 @@ export default function VoiceConnection({
       remoteUserId: number
     ) {
       const peer =
-        peersRef.current.get(
+        peers.get(
           remoteUserId
         );
 
@@ -1026,7 +1022,7 @@ export default function VoiceConnection({
         remoteUserId
       );
 
-      peersRef.current.delete(
+      peers.delete(
         remoteUserId
       );
 
@@ -1252,7 +1248,7 @@ export default function VoiceConnection({
           return;
         }
 
-        localStreamRef.current =
+        localStream =
           stream;
 
         console.log(
@@ -1538,7 +1534,7 @@ export default function VoiceConnection({
         const [
           remoteUserId,
           peer,
-        ] of peersRef.current
+        ] of peers
       ) {
         console.log(
           "VOICE: CLOSING PEER",
@@ -1569,23 +1565,21 @@ export default function VoiceConnection({
         } catch {}
       }
 
-      peersRef.current.clear();
+      peers.clear();
 
       /*
        * Stop microphone.
        */
 
-      const stream =
-        localStreamRef.current;
 
-      if (stream) {
-        stream
+      if (localStream) {
+        localStream 
           .getTracks()
           .forEach((track) =>
             track.stop()
           );
 
-        localStreamRef.current =
+        localStream =
           null;
       }
 
