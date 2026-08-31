@@ -129,6 +129,24 @@ func (h *Handler) Connect(
 		Conn:      conn,
 	}
 
+	oldClient := h.hub.FindClient(
+		channelID,
+		userID,
+	)
+
+	if oldClient != nil {
+		log.Printf(
+			"VOICE: replacing existing connection user=%d channel=%d",
+			userID,
+			channelID,
+		)
+
+		_ = oldClient.Conn.Close(
+			websocket.StatusNormalClosure,
+			"replaced by newer connection",
+		)
+	}
+
 	// Get the users already in the channel before adding
 	// the new client.
 	existingClients := h.hub.Clients(channelID)
