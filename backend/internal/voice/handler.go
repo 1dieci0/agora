@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"time"
 
 	"agora/internal/channels"
 	"agora/internal/servers"
@@ -20,6 +21,8 @@ type Handler struct {
 	serverRepo  *servers.Repository
 }
 
+const websocketWriteTimeout = 5 * time.Second
+
 func NewHandler(
 	hub *Hub,
 	channelRepo *channels.Repository,
@@ -32,11 +35,29 @@ func NewHandler(
 	}
 }
 
+func (h *Handler) writeMessage(
+	client *Client,
+	message []byte,
+) error {
+	ctx, cancel :=
+		context.WithTimeout(
+			context.Background(),
+			websocketWriteTimeout,
+		)
+
+	defer cancel()
+
+	return client.Conn.Write(
+		ctx,
+		websocket.MessageText,
+		message,
+	)
+}
+
 func (h *Handler) Connect(
 	w http.ResponseWriter,
 	r *http.Request,
 ) {
-
 
 	userID, ok := users.UserIDFromContext(r.Context())
 	if !ok {
@@ -149,16 +170,30 @@ func (h *Handler) Connect(
 
 	// Get the users already in the channel before adding
 	// the new client.
-	existingClients := h.hub.Clients(channelID)
+	//existingClients := h.hub.Clients(channelID)
 
 	// Add the new client.
-	h.hub.Add(client)
+	//h.hub.Add(client)
+
+	previousClient, existingClients := h.hub.Join(client)
+
+	if previousClient != nil {
+		log.Printf(
+			"VOICE: replacing existing connection user=%d channel=%d",
+			userID,
+			channelID,
+		)
+
+		_ = previousClient.Conn.Close(
+			websocket.StatusNormalClosure,
+			"replaced by newer connection",
+		)
+	}
 
 	// Tell the new client about everyone already in the channel.
 	for _, existingClient := range existingClients {
-		err := client.Conn.Write(
-			r.Context(),
-			websocket.MessageText,
+		err := h.writeMessage(
+			client,
 			mustMarshal(VoiceMessage{
 				Type:   "user_joined",
 				UserID: existingClient.UserID,
@@ -173,7 +208,6 @@ func (h *Handler) Connect(
 
 	// Tell everyone else that this user joined.
 	h.broadcastEvent(
-		r,
 		channelID,
 		VoiceMessage{
 			Type:   "user_joined",
@@ -185,10 +219,17 @@ func (h *Handler) Connect(
 	// When the connection ends, remove the client
 	// and notify everyone else.
 	defer func() {
-		h.hub.Remove(client)
+		removed := h.hub.Remove(client)
+
+		if !removed {
+			/*
+			* This connection was already replaced by a newer
+			* connection for the same user.
+			 */
+			return
+		}
 
 		h.broadcastEvent(
-			r,
 			channelID,
 			VoiceMessage{
 				Type:   "user_left",
@@ -206,7 +247,6 @@ func (h *Handler) Connect(
 		}
 
 		h.broadcast(
-			r,
 			client,
 			message,
 		)
@@ -214,7 +254,6 @@ func (h *Handler) Connect(
 }
 
 func (h *Handler) broadcast(
-	r *http.Request,
 	sender *Client,
 	message []byte,
 ) {
@@ -261,9 +300,8 @@ func (h *Handler) broadcast(
 			target.UserID,
 		)
 
-		err := target.Conn.Write(
-			context.Background(),
-			websocket.MessageText,
+		err := h.writeMessage(
+			target,
 			message,
 		)
 
@@ -296,9 +334,8 @@ func (h *Handler) broadcast(
 			client.UserID,
 		)
 
-		err := client.Conn.Write(
-			context.Background(),
-			websocket.MessageText,
+		err := h.writeMessage(
+			client,
 			message,
 		)
 
@@ -314,7 +351,6 @@ func (h *Handler) broadcast(
 }
 
 func (h *Handler) broadcastEvent(
-	r *http.Request,
 	channelID int,
 	message VoiceMessage,
 	exclude *Client,
@@ -324,18 +360,27 @@ func (h *Handler) broadcastEvent(
 		return
 	}
 
-	clients := h.hub.Clients(channelID)
+	clients :=
+		h.hub.Clients(channelID)
 
 	for _, client := range clients {
 		if client == exclude {
 			continue
 		}
 
-		_ = client.Conn.Write(
-			r.Context(),
-			websocket.MessageText,
+		err := h.writeMessage(
+			client,
 			data,
 		)
+
+		if err != nil {
+			log.Printf(
+				"VOICE: event write FAILED type=%s to=%d: %v",
+				message.Type,
+				client.UserID,
+				err,
+			)
+		}
 	}
 }
 
