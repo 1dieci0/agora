@@ -111,17 +111,37 @@ func (s *Server) HandleHTTP(
 		return
 	}
 
-	userID, err := strconv.Atoi(
-		r.URL.Query().Get("user_id"),
-	)
-	if err != nil || userID <= 0 {
+	token := r.URL.Query().Get("token")
+
+	if token == "" {
 		http.Error(
 			w,
-			"invalid user ID",
-			http.StatusBadRequest,
+			"missing SFU token",
+			http.StatusUnauthorized,
 		)
 		return
 	}
+
+	claims, err := ParseSFUToken(token)
+	if err != nil {
+		http.Error(
+			w,
+			"invalid SFU token",
+			http.StatusUnauthorized,
+		)
+		return
+	}
+
+	if claims.ChannelID != roomID {
+		http.Error(
+			w,
+			"token channel mismatch",
+			http.StatusForbidden,
+		)
+		return
+	}
+
+	userID := claims.UserID
 
 	conn, err := websocket.Accept(
 		w,
@@ -169,8 +189,27 @@ func (s *Server) HandleHTTP(
 	room.AddPeer(peer)
 
 	defer func() {
-		room.RemovePeer(userID)
+		/*
+		* Remove the peer from the room first.
+		 */
+		removedPeer := room.RemovePeer(userID)
 
+		if removedPeer == nil {
+			return
+		}
+
+		/*
+		* Remove this user's forwarded tracks
+		* from every remaining subscriber.
+		 */
+		s.removeForwardedTracks(
+			room,
+			userID,
+		)
+
+		/*
+		* Now close the publisher's PeerConnection.
+		 */
 		if err := pc.Close(); err != nil {
 			log.Printf(
 				"SFU: PeerConnection close failed user=%d: %v",
@@ -521,4 +560,70 @@ func (s *Server) handleAnswer(
 			SDP:  message.SDP,
 		},
 	)
+}
+
+func (s *Server) removeForwardedTracks(
+	room *Room,
+	publisherID int,
+) {
+	for _, subscriber := range room.Peers() {
+		if subscriber.UserID == publisherID {
+			continue
+		}
+
+		subscriber.mu.Lock()
+
+		localTrack, exists :=
+			subscriber.outgoingTracks[publisherID]
+
+		if exists {
+			delete(
+				subscriber.outgoingTracks,
+				publisherID,
+			)
+		}
+
+		subscriber.mu.Unlock()
+
+		if !exists {
+			continue
+		}
+
+		log.Printf(
+			"SFU: removing forwarded track publisher=%d subscriber=%d",
+			publisherID,
+			subscriber.UserID,
+		)
+
+		/*
+		 * Find the sender associated with this
+		 * TrackLocalStaticRTP and remove it.
+		 */
+		for _, sender := range subscriber.PC.GetSenders() {
+			if sender.Track() == localTrack {
+				if err := subscriber.PC.RemoveTrack(sender); err != nil {
+					log.Printf(
+						"SFU: failed removing track publisher=%d subscriber=%d: %v",
+						publisherID,
+						subscriber.UserID,
+						err,
+					)
+				}
+
+				break
+			}
+		}
+
+		/*
+		 * Renegotiate after removing the track.
+		 */
+		if err := s.renegotiate(subscriber); err != nil {
+			log.Printf(
+				"SFU: renegotiation after publisher leave failed publisher=%d subscriber=%d: %v",
+				publisherID,
+				subscriber.UserID,
+				err,
+			)
+		}
+	}
 }

@@ -225,9 +225,15 @@ func (app *App) RegisterRoutes() {
 	)
 
 	//voice
+
+	// app.router.HandleFunc(
+	// 	"GET /api/channels/{channelID}/voice",
+	// 	app.users.RequireAuth(app.voice.Join),
+	// )
+
 	app.router.HandleFunc(
-		"GET /ws/voice/{channelID}",
-		app.users.RequireAuth(app.voice.Connect),
+		"POST /api/voice/token",
+		app.users.RequireAuth(app.voice.CreateToken),
 	)
 
 }

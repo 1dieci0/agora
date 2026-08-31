@@ -5,8 +5,6 @@ import { getMe, logout} from "./api";
 import type { User } from "./types";
 import Signup from "./Signup";
 
-import SfuTest from "./SfuTest";
-
 
 function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -37,7 +35,7 @@ function App() {
     }
   }
 
-  /*
+  
   if (loading) {
     return <p>Loading...</p>;
   }
@@ -65,14 +63,7 @@ function App() {
     onLogout={handleLogout}
     onUserUpdate={setUser}
   />
-  */
-   return (
-    <>
-      <SfuTest/>
-
-      {/* rest of your app */}
-    </>
-  );
+  
 }
 
 export default App;

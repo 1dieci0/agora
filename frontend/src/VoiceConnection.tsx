@@ -1,1605 +1,498 @@
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
+import { getVoiceToken } from "./api";
 
 type VoiceConnectionProps = {
   channelId: number;
-  currentUserId: number;
-};
-
-
-type SignalMessage = {
-  type:
-    | "user_joined"
-    | "user_left"
-    | "offer"
-    | "answer"
-    | "ice_candidate";
-
-  // User who sent the message.
-  user_id?: number | string;
-
-  // Target user for signaling messages.
-  target_user_id?: number | string;
-
-  // WebRTC SDP.
-  sdp?: string;
-
-  // WebRTC ICE candidate.
-  candidate?: string;
-};
-
-type Peer = {
-  pc: RTCPeerConnection;
-  audio: HTMLAudioElement;
-  remoteStream: MediaStream;
-};
-
-/*
- * ============================================================
- * LOCAL TEST CONFIG
- * ============================================================
- *
- * Two browsers on the SAME PC do not need STUN or TURN.
- *
- * We deliberately use no iceServers here.
- *
- * We also use non-trickle ICE below:
- * wait until ICE gathering completes, then send the SDP.
- */
-const RTC_CONFIG: RTCConfiguration = {
-  iceServers: [],
-  iceTransportPolicy: "all",
-  bundlePolicy: "max-bundle",
-  rtcpMuxPolicy: "require",
 };
 
 export default function VoiceConnection({
   channelId,
-  currentUserId,
 }: VoiceConnectionProps) {
-
-  let ws: WebSocket | null = null;
-
-  let localStream: MediaStream | null = null;
-
-  const peers = new Map<number, Peer>();
-
-  const generationRef =
-    useRef(0);
-
-
   useEffect(() => {
-    const generation =
-      ++generationRef.current;
-
     let cancelled = false;
 
-
-    console.log(
-      "================================================"
-    );
-
-    console.log("VOICE START", {
-      channelId,
-      currentUserId,
-      generation,
-    });
-
-    console.log(
-      "================================================"
-    );
-
-    /*
-     * ------------------------------------------------------------
-     * USER ID
-     * ------------------------------------------------------------
-     */
-
-    function toUserId(
-      value: unknown
-    ): number | null {
-      const id =
-        typeof value === "number"
-          ? value
-          : typeof value === "string"
-            ? Number(value)
-            : NaN;
-
-      if (
-        !Number.isFinite(id) ||
-        id <= 0
-      ) {
-        return null;
-      }
-
-      return id;
-    }
-
-
-    /*
-     * ------------------------------------------------------------
-     * SIGNAL SEND
-     * ------------------------------------------------------------
-     */
-
-    function sendSignal(message: Record<string, unknown>) {
-
-      if (!ws) {
-        console.warn(
-          "VOICE: cannot send signal; websocket doesn't exist",
-          message
-        );
-        return;
-      }
-
-      if (ws.readyState !== WebSocket.OPEN) {
-        console.warn(
-          "VOICE: cannot send signal; websocket isn't open",
-          {
-            readyState: ws.readyState,
-            message,
-          }
-        );
-        return;
-      }
-
-      console.log("VOICE SIGNAL SEND:", message);
-
-      ws.send(JSON.stringify(message));
-    }
-
-
-    /*
-     * ------------------------------------------------------------
-     * WAIT FOR ICE GATHERING
-     * ------------------------------------------------------------
-     *
-     * For local debugging we deliberately wait for ICE gathering
-     * to finish before sending the offer/answer.
-     *
-     * This means the SDP should contain:
-     *
-     *   a=candidate:...
-     *
-     * before it reaches the other browser.
-     */
-
-    function waitForIceGathering(
-      pc: RTCPeerConnection,
-      remoteUserId: number
-    ): Promise<void> {
-      if (pc.iceGatheringState === "complete") {
-        console.log(
-          "VOICE: ICE already complete",
-          remoteUserId
-        );
-
-        return Promise.resolve();
-      }
-
-      return new Promise((resolve) => {
-        let finished = false;
-
-        const finish = () => {
-          if (finished) {
-            return;
-          }
-
-          finished = true;
-
-          window.clearTimeout(timeout);
-
-          pc.removeEventListener(
-            "icegatheringstatechange",
-            check
-          );
-
-          resolve();
-        };
-
-        const check = () => {
-          console.log(
-            "VOICE: ICE GATHERING STATE",
-            {
-              remoteUserId,
-              state: pc.iceGatheringState,
-            }
-          );
-
-          if (pc.iceGatheringState === "complete") {
-            finish();
-          }
-        };
-
-        const timeout = window.setTimeout(() => {
-          console.warn(
-            "VOICE: ICE gathering timeout",
-            {
-              remoteUserId,
-              state: pc.iceGatheringState,
-            }
-          );
-
-          finish();
-        }, 5000);
-
-        pc.addEventListener(
-          "icegatheringstatechange",
-          check
-        );
-
-        check();
-      });
-    }
-
-    /*
-     * ------------------------------------------------------------
-     * PEER CREATION
-     * ------------------------------------------------------------
-     */
-
-    function getOrCreatePeer(
-      remoteUserId: number
-    ): Peer {
-      const existing =
-        peers.get(
-          remoteUserId
-        );
-
-      if (
-        existing &&
-        existing.pc.connectionState !== "closed" &&
-        existing.pc.connectionState !== "failed"
-      ) {
-        return existing;
-      }
-
-      if (existing) {
-        try {
-          existing.pc.close();
-        } catch {}
-
-        try {
-          existing.audio.pause();
-          existing.audio.srcObject =
-            null;
-          existing.audio.remove();
-        } catch {}
-
-        peers.delete(
-          remoteUserId
-        );
-      }
-
-      console.log(
-        "VOICE: creating RTCPeerConnection",
-        {
-          remoteUserId,
-          currentUserId,
-        }
-      );
-
-      const pc =
-        new RTCPeerConnection(
-          RTC_CONFIG
-        );
-
-      const remoteStream =
-        new MediaStream();
-
-      const audio =
-        document.createElement(
-          "audio"
-        );
-
-      audio.autoplay = true;
-      audio.controls = false;
-      audio.volume = 1;
-
-      audio.style.position =
-        "fixed";
-      audio.style.width = "1px";
-      audio.style.height = "1px";
-      audio.style.opacity = "0";
-      audio.style.pointerEvents =
-        "none";
-
-      audio.srcObject =
-        remoteStream;
-
-      document.body.appendChild(
-        audio
-      );
-
-      /*
-       * ----------------------------------------------------------
-       * LOCAL TRACKS
-       * ----------------------------------------------------------
-       */
-
-
-      if (!localStream) {
-        throw new Error(
-          "Local microphone stream is missing"
-        );
-      }
-
-      for (
-        const track of
-        localStream.getTracks()
-      ) {
-        console.log(
-          "VOICE: add local track",
-          {
-            remoteUserId,
-            kind: track.kind,
-            id: track.id,
-            enabled:
-              track.enabled,
-            readyState:
-              track.readyState,
-          }
-        );
-
-        pc.addTrack(
-          track,
-          localStream
-        );
-      }
-
-      /*
-       * ----------------------------------------------------------
-       * REMOTE TRACK
-       * ----------------------------------------------------------
-       */
-
-      pc.ontrack = async (
-        event
-      ) => {
-        console.log(
-          "VOICE: REMOTE TRACK",
-          {
-            remoteUserId,
-            kind:
-              event.track.kind,
-            id:
-              event.track.id,
-            streams:
-              event.streams.length,
-          }
-        );
-
-        const alreadyAdded =
-          remoteStream
-            .getTracks()
-            .some(
-              (track) =>
-                track.id ===
-                event.track.id
-            );
-
-        if (!alreadyAdded) {
-          remoteStream.addTrack(
-            event.track
-          );
-        }
-
-        audio.srcObject =
-          remoteStream;
-
-        try {
-          await audio.play();
-
-          console.log(
-            "VOICE: remote audio playing",
-            remoteUserId
-          );
-        } catch (error) {
-          console.warn(
-            "VOICE: audio.play() failed",
-            {
-              remoteUserId,
-              error,
-            }
-          );
-        }
-      };
-
-      /*
-       * ----------------------------------------------------------
-       * ICE CANDIDATE
-       * ----------------------------------------------------------
-       *
-       * We are NOT sending candidates individually.
-       *
-       * We are collecting them into the SDP by waiting for ICE
-       * gathering to complete.
-       */
-
-      pc.onicecandidate = (
-        event
-      ) => {
-        if (
-          event.candidate
-        ) {
-          console.log(
-            "VOICE: LOCAL ICE CANDIDATE",
-            {
-              remoteUserId,
-              candidate:
-                event.candidate.toJSON(),
-            }
-          );
-        } else {
-          console.log(
-            "VOICE: LOCAL ICE END",
-            remoteUserId
-          );
-        }
-      };
-
-      /*
-       * ----------------------------------------------------------
-       * ICE GATHERING
-       * ----------------------------------------------------------
-       */
-
-      pc.onicegatheringstatechange =
-        () => {
-          console.log(
-            "VOICE: ICE GATHERING STATE",
-            {
-              remoteUserId,
-              state:
-                pc.iceGatheringState,
-            }
-          );
-        };
-
-      /*
-       * ----------------------------------------------------------
-       * ICE CONNECTION
-       * ----------------------------------------------------------
-       */
-
-      pc.oniceconnectionstatechange =
-        async () => {
-          console.log(
-            "VOICE: ICE CONNECTION STATE",
-            {
-              remoteUserId,
-              state:
-                pc.iceConnectionState,
-            }
-          );
-
-          if (
-            pc.iceConnectionState ===
-              "connected" ||
-            pc.iceConnectionState ===
-              "completed"
-          ) {
-            console.log(
-              "VOICE: ICE CONNECTED",
-              remoteUserId
-            );
-
-            await dumpStats(
-              pc,
-              remoteUserId
-            );
-          }
-
-          if (
-            pc.iceConnectionState ===
-            "failed"
-          ) {
-            console.error(
-              "VOICE: ICE FAILED",
-              remoteUserId
-            );
-
-            await dumpStats(
-              pc,
-              remoteUserId
-            );
-          }
-        };
-
-      /*
-       * ----------------------------------------------------------
-       * CONNECTION
-       * ----------------------------------------------------------
-       */
-
-      pc.onconnectionstatechange =
-        () => {
-          console.log(
-            "VOICE: CONNECTION STATE",
-            {
-              remoteUserId,
-              state:
-                pc.connectionState,
-            }
-          );
-
-          if (
-            pc.connectionState ===
-            "connected"
-          ) {
-            console.log(
-              "VOICE: PEER CONNECTED",
-              remoteUserId
-            );
-          }
-
-          if (
-            pc.connectionState ===
-            "failed"
-          ) {
-            console.error(
-              "VOICE: PEER FAILED",
-              remoteUserId
-            );
-          }
-        };
-
-      /*
-       * ----------------------------------------------------------
-       * SIGNALING
-       * ----------------------------------------------------------
-       */
-
-      pc.onsignalingstatechange =
-        () => {
-          console.log(
-            "VOICE: SIGNALING STATE",
-            {
-              remoteUserId,
-              state:
-                pc.signalingState,
-            }
-          );
-        };
-
-      /*
-       * ----------------------------------------------------------
-       * ICE ERRORS
-       * ----------------------------------------------------------
-       */
-
-      pc.onicecandidateerror =
-        (event) => {
-          console.error(
-            "VOICE: ICE CANDIDATE ERROR",
-            {
-              remoteUserId,
-              errorCode:
-                event.errorCode,
-              errorText:
-                event.errorText,
-              url:
-                event.url,
-              address:
-                event.address,
-              port:
-                event.port,
-            }
-          );
-        };
-
-      const peer: Peer = {
-        pc,
-        audio,
-        remoteStream,
-      };
-
-      peers.set(
-        remoteUserId,
-        peer
-      );
-
-      console.log(
-        "VOICE: PEER CREATED",
-        {
-          remoteUserId,
-          signalingState:
-            pc.signalingState,
-          iceGatheringState:
-            pc.iceGatheringState,
-          iceConnectionState:
-            pc.iceConnectionState,
-          connectionState:
-            pc.connectionState,
-        }
-      );
-
-      return peer;
-    }
-
-    /*
-     * ------------------------------------------------------------
-     * OFFER
-     * ------------------------------------------------------------
-     */
-
-    async function createOffer(
-      remoteUserId: number
-    ) {
-      try {
-        const peer =
-          getOrCreatePeer(
-            remoteUserId
-          );
-
-        const { pc } = peer;
-
-        if (
-          pc.signalingState !==
-          "stable"
-        ) {
-          console.log(
-            "VOICE: refusing offer; state isn't stable",
-            {
-              remoteUserId,
-              state:
-                pc.signalingState,
-            }
-          );
-
-          return;
-        }
-
-        console.log(
-          "VOICE: creating offer",
-          remoteUserId
-        );
-
-        const offer =
-          await pc.createOffer();
-
-        console.log(
-          "VOICE: OFFER CREATED",
-          {
-            remoteUserId,
-            type: offer.type,
-            sdpLength:
-              offer.sdp?.length,
-          }
-        );
-
-        await pc.setLocalDescription(
-          offer
-        );
-
-        console.log(
-          "VOICE: LOCAL OFFER SET",
-          {
-            remoteUserId,
-            signalingState:
-              pc.signalingState,
-            iceGatheringState:
-              pc.iceGatheringState,
-            sdpLength:
-              pc.localDescription
-                ?.sdp.length,
-          }
-        );
-
-        /*
-         * Wait until candidates have been gathered.
-         */
-        await waitForIceGathering(
-          pc,
-          remoteUserId
-        );
-
-        if (cancelled) {
-          return;
-        }
-
-        const sdp =
-          pc.localDescription?.sdp;
-
-        console.log(
-          "VOICE: FINAL OFFER SDP",
-          {
-            remoteUserId,
-            sdpLength:
-              sdp?.length,
-            hasCandidate:
-              sdp?.includes(
-                "a=candidate:"
-              ),
-            candidateCount:
-              sdp
-                ?.split("\n")
-                .filter((line) =>
-                  line.startsWith(
-                    "a=candidate:"
-                  )
-                ).length ?? 0,
-          }
-        );
-
-        if (!sdp) {
-          console.error(
-            "VOICE: no local offer SDP"
-          );
-
-          return;
-        }
-
-        sendSignal({
-          type: "offer",
-          user_id: currentUserId,
-          target_user_id: remoteUserId,
-          sdp,
-        });
-      } catch (error) {
-        console.error(
-          "VOICE: createOffer failed",
-          {
-            remoteUserId,
-            error,
-          }
-        );
-      }
-    }
-
-    /*
-     * ------------------------------------------------------------
-     * OFFER HANDLER
-     * ------------------------------------------------------------
-     */
-
-    async function handleOffer(
-      remoteUserId: number,
-      sdp: string
-    ) {
-      try {
-        const peer =
-          getOrCreatePeer(
-            remoteUserId
-          );
-
-        const { pc } = peer;
-
-        console.log(
-          "VOICE: RECEIVED OFFER",
-          {
-            remoteUserId,
-            signalingState:
-              pc.signalingState,
-            sdpLength:
-              sdp.length,
-            hasCandidate:
-              sdp.includes(
-                "a=candidate:"
-              ),
-            candidateCount:
-              sdp
-                .split("\n")
-                .filter((line) =>
-                  line.startsWith(
-                    "a=candidate:"
-                  )
-                ).length,
-          }
-        );
-
-        if (
-          pc.signalingState !==
-          "stable"
-        ) {
-          console.warn(
-            "VOICE: ignoring offer because peer isn't stable",
-            {
-              remoteUserId,
-              state:
-                pc.signalingState,
-            }
-          );
-
-          return;
-        }
-
-        await pc.setRemoteDescription(
-          {
-            type: "offer",
-            sdp,
-          }
-        );
-
-        console.log(
-          "VOICE: REMOTE OFFER SET",
-          {
-            remoteUserId,
-            signalingState:
-              pc.signalingState,
-            iceConnectionState:
-              pc.iceConnectionState,
-          }
-        );
-
-        const answer =
-          await pc.createAnswer();
-
-        await pc.setLocalDescription(
-          answer
-        );
-
-        console.log(
-          "VOICE: LOCAL ANSWER SET",
-          {
-            remoteUserId,
-            signalingState:
-              pc.signalingState,
-            iceGatheringState:
-              pc.iceGatheringState,
-          }
-        );
-
-        /*
-         * Wait for answer ICE gathering too.
-         */
-        await waitForIceGathering(
-          pc,
-          remoteUserId
-        );
-
-        if (cancelled) {
-          return;
-        }
-
-        const finalSdp =
-          pc.localDescription?.sdp;
-
-        console.log(
-          "VOICE: FINAL ANSWER SDP",
-          {
-            remoteUserId,
-            sdpLength:
-              finalSdp?.length,
-            hasCandidate:
-              finalSdp?.includes(
-                "a=candidate:"
-              ),
-            candidateCount:
-              finalSdp
-                ?.split("\n")
-                .filter((line) =>
-                  line.startsWith(
-                    "a=candidate:"
-                  )
-                ).length ?? 0,
-          }
-        );
-
-        if (!finalSdp) {
-          console.error(
-            "VOICE: no local answer SDP"
-          );
-
-          return;
-        }
-
-        sendSignal({
-          type: "answer",
-          user_id: currentUserId,
-          target_user_id: remoteUserId,
-          sdp: finalSdp,
-        });
-
-        console.log(
-          "VOICE: ANSWER SENT",
-          remoteUserId
-        );
-      } catch (error) {
-        console.error(
-          "VOICE: handleOffer failed",
-          {
-            remoteUserId,
-            error,
-          }
-        );
-      }
-    }
-
-    /*
-     * ------------------------------------------------------------
-     * ANSWER HANDLER
-     * ------------------------------------------------------------
-     */
-
-    async function handleAnswer(
-      remoteUserId: number,
-      sdp: string
-    ) {
-      try {
-        const peer =
-          peers.get(
-            remoteUserId
-          );
-
-        if (!peer) {
-          console.error(
-            "VOICE: answer received but peer doesn't exist",
-            remoteUserId
-          );
-
-          return;
-        }
-
-        const { pc } = peer;
-
-        console.log(
-          "VOICE: RECEIVED ANSWER",
-          {
-            remoteUserId,
-            signalingState:
-              pc.signalingState,
-            sdpLength:
-              sdp.length,
-            hasCandidate:
-              sdp.includes(
-                "a=candidate:"
-              ),
-            candidateCount:
-              sdp
-                .split("\n")
-                .filter((line) =>
-                  line.startsWith(
-                    "a=candidate:"
-                  )
-                ).length,
-          }
-        );
-
-        if (
-          pc.signalingState !==
-          "have-local-offer"
-        ) {
-          console.warn(
-            "VOICE: ignoring answer; wrong signaling state",
-            {
-              remoteUserId,
-              state:
-                pc.signalingState,
-            }
-          );
-
-          return;
-        }
-
-        await pc.setRemoteDescription(
-          {
-            type: "answer",
-            sdp,
-          }
-        );
-
-        console.log(
-          "VOICE: REMOTE ANSWER SET",
-          {
-            remoteUserId,
-            signalingState:
-              pc.signalingState,
-            iceConnectionState:
-              pc.iceConnectionState,
-          }
-        );
-      } catch (error) {
-        console.error(
-          "VOICE: handleAnswer failed",
-          {
-            remoteUserId,
-            error,
-          }
-        );
-      }
-    }
-
-    /*
-     * ------------------------------------------------------------
-     * USER LEFT
-     * ------------------------------------------------------------
-     */
-
-    function removePeer(
-      remoteUserId: number
-    ) {
-      const peer =
-        peers.get(
-          remoteUserId
-        );
-
-      if (!peer) {
-        return;
-      }
-
-      console.log(
-        "VOICE: REMOVING PEER",
-        remoteUserId
-      );
-
-      peers.delete(
-        remoteUserId
-      );
-
-      try {
-        peer.pc.close();
-      } catch {}
-
-      try {
-        peer.audio.pause();
-        peer.audio.srcObject =
-          null;
-        peer.audio.remove();
-      } catch {}
-    }
-
-    /*
-     * ------------------------------------------------------------
-     * STATS
-     * ------------------------------------------------------------
-     */
-
-    async function dumpStats(
-      pc: RTCPeerConnection,
-      remoteUserId: number
-    ) {
-      try {
-        const stats =
-          await pc.getStats();
-
-        const result: Record<
-          string,
-          unknown[]
-        > = {
-          candidatePairs: [],
-          localCandidates: [],
-          remoteCandidates: [],
-          inbound: [],
-          outbound: [],
-          codecs: [],
-        };
-
-        stats.forEach(
-          (report) => {
-            if (
-              report.type ===
-              "candidate-pair"
-            ) {
-              result.candidatePairs.push(
-                {
-                  state:
-                    report.state,
-                  nominated:
-                    report.nominated,
-                  bytesSent:
-                    report.bytesSent,
-                  bytesReceived:
-                    report.bytesReceived,
-                  localCandidateId:
-                    report.localCandidateId,
-                  remoteCandidateId:
-                    report.remoteCandidateId,
-                }
-              );
-            }
-
-            if (
-              report.type ===
-              "local-candidate"
-            ) {
-              result.localCandidates.push(
-                {
-                  candidateType:
-                    report.candidateType,
-                  protocol:
-                    report.protocol,
-                  address:
-                    report.address,
-                  port:
-                    report.port,
-                }
-              );
-            }
-
-            if (
-              report.type ===
-              "remote-candidate"
-            ) {
-              result.remoteCandidates.push(
-                {
-                  candidateType:
-                    report.candidateType,
-                  protocol:
-                    report.protocol,
-                  address:
-                    report.address,
-                  port:
-                    report.port,
-                }
-              );
-            }
-
-            if (
-              report.type ===
-                "inbound-rtp" &&
-              report.kind ===
-                "audio"
-            ) {
-              result.inbound.push(
-                {
-                  packetsReceived:
-                    report.packetsReceived,
-                  bytesReceived:
-                    report.bytesReceived,
-                  packetsLost:
-                    report.packetsLost,
-                  codecId:
-                    report.codecId,
-                }
-              );
-            }
-
-            if (
-              report.type ===
-                "outbound-rtp" &&
-              report.kind ===
-                "audio"
-            ) {
-              result.outbound.push(
-                {
-                  packetsSent:
-                    report.packetsSent,
-                  bytesSent:
-                    report.bytesSent,
-                  codecId:
-                    report.codecId,
-                  ssrc:
-                    report.ssrc,
-                }
-              );
-            }
-
-            if (
-              report.type ===
-                "codec" &&
-              report.mimeType?.startsWith(
-                "audio/"
-              )
-            ) {
-              result.codecs.push(
-                {
-                  mimeType:
-                    report.mimeType,
-                  clockRate:
-                    report.clockRate,
-                  channels:
-                    report.channels,
-                  payloadType:
-                    report.payloadType,
-                }
-              );
-            }
-          }
-        );
-
-        console.log(
-          "VOICE: STATS",
-          {
-            remoteUserId,
-            connectionState:
-              pc.connectionState,
-            iceConnectionState:
-              pc.iceConnectionState,
-            iceGatheringState:
-              pc.iceGatheringState,
-            signalingState:
-              pc.signalingState,
-            result,
-          }
-        );
-      } catch (error) {
-        console.error(
-          "VOICE: stats failed",
-          error
-        );
-      }
-    }
-
-    /*
-     * ------------------------------------------------------------
-     * START
-     * ------------------------------------------------------------
-     */
+    let stream: MediaStream | null = null;
+    let pc: RTCPeerConnection | null = null;
+    let ws: WebSocket | null = null;
+
+    const remoteAudios: HTMLAudioElement[] = [];
 
     async function start() {
-      /*
-       * Microphone.
-       */
-
       try {
-        const stream =
-          await navigator.mediaDevices.getUserMedia(
+        /*
+         * --------------------------------------------------------
+         * Microphone
+         * --------------------------------------------------------
+         */
+
+        stream =
+          await navigator.mediaDevices.getUserMedia({
+            audio: {
+              echoCancellation: true,
+              noiseSuppression: true,
+              autoGainControl: true,
+            },
+            video: false,
+          });
+
+        if (cancelled) {
+          stream
+            .getTracks()
+            .forEach((track) => track.stop());
+
+          stream = null;
+          return;
+        }
+
+        console.log(
+          "SFU TEST: microphone ready"
+        );
+
+        /*
+         * --------------------------------------------------------
+         * PeerConnection
+         * --------------------------------------------------------
+         */
+
+        const peerConnection = new RTCPeerConnection({
+          iceServers: [],
+        });
+
+        pc = peerConnection;
+
+        peerConnection.ontrack = (event) => {
+          console.log(
+            "SFU TEST: remote track received",
             {
-              audio: {
-                echoCancellation: true,
-                noiseSuppression: true,
-                autoGainControl: true,
-              },
-              video: false,
+              kind: event.track.kind,
+              streams: event.streams.length,
             }
           );
 
-        if (
-          cancelled ||
-          generation !==
-            generationRef.current
-        ) {
-          stream
-            .getTracks()
-            .forEach((track) =>
-              track.stop()
-            );
-
-          return;
-        }
-
-        localStream =
-          stream;
-
-        console.log(
-          "VOICE: MICROPHONE READY",
-          stream
-            .getTracks()
-            .map(
-              (track) => ({
-                id: track.id,
-                kind:
-                  track.kind,
-                enabled:
-                  track.enabled,
-                readyState:
-                  track.readyState,
-              })
-            )
-        );
-      } catch (error) {
-        console.error(
-          "VOICE: MICROPHONE FAILED",
-          error
-        );
-
-        return;
-      }
-
-      /*
-       * WebSocket.
-       */
-
-      ws =
-        new WebSocket(
-          `ws://localhost:8080/ws/voice/${channelId}`
-        );
-
-
-      ws.onopen = () => {
-        if (
-          generation !==
-          generationRef.current
-        ) {
-          return;
-        }
-
-        console.log(
-          "VOICE: WEBSOCKET OPEN",
-          {
-            channelId,
-            currentUserId,
-          }
-        );
-
-        // flushOutgoingQueue();
-      };
-
-      ws.onerror = (
-        event
-      ) => {
-        console.error(
-          "VOICE: WEBSOCKET ERROR",
-          event
-        );
-      };
-
-      ws.onclose = (
-        event
-      ) => {
-        console.log(
-          "VOICE: WEBSOCKET CLOSED",
-          {
-            code:
-              event.code,
-            reason:
-              event.reason,
-            wasClean:
-              event.wasClean,
-          }
-        );
-      };
-
-      ws.onmessage =
-        async (event) => {
-          if (
-            cancelled ||
-            generation !==
-              generationRef.current
-          ) {
+          if (event.track.kind !== "audio") {
             return;
           }
 
+          const remoteStream =
+            event.streams[0] ??
+            new MediaStream([event.track]);
+
+          const audio = new Audio();
+
+          audio.autoplay = true;
+          audio.srcObject = remoteStream;
+
+          remoteAudios.push(audio);
+
+          audio.play().catch((error) => {
+            if (!cancelled) {
+              console.error(
+                "SFU TEST: failed to play remote audio",
+                error
+              );
+            }
+          });
+
+          /*
+           * If the SFU/browser ends this track,
+           * make sure the audio element stops.
+           */
+          event.track.onended = () => {
+            audio.pause();
+            audio.srcObject = null;
+
+            const index =
+              remoteAudios.indexOf(audio);
+
+            if (index !== -1) {
+              remoteAudios.splice(index, 1);
+            }
+          };
+        };
+
+        /*
+         * Add microphone.
+         */
+
+        for (const track of stream.getTracks()) {
+          peerConnection.addTrack(track, stream);
+        }
+
+        /*
+         * ICE debugging.
+         */
+
+        peerConnection.onicecandidate = (event) => {
+          if (event.candidate) {
+            console.log(
+              "SFU TEST: local ICE candidate",
+              event.candidate
+            );
+          } else {
+            console.log(
+              "SFU TEST: ICE gathering complete"
+            );
+          }
+        };
+
+        peerConnection.onicegatheringstatechange = () => {
+          console.log(
+            "SFU TEST: ICE gathering state",
+            peerConnection?.iceGatheringState
+          );
+        };
+
+        peerConnection.oniceconnectionstatechange = () => {
+          console.log(
+            "SFU TEST: ICE connection state",
+            peerConnection?.iceConnectionState
+          );
+        };
+
+        peerConnection.onconnectionstatechange = () => {
+          console.log(
+            "SFU TEST: connection state",
+            peerConnection?.connectionState
+          );
+        };
+
+        peerConnection.onsignalingstatechange = () => {
+          console.log(
+            "SFU TEST: signaling state",
+            peerConnection?.signalingState
+          );
+        };
+
+        /*
+         * --------------------------------------------------------
+         * Get SFU token
+         * --------------------------------------------------------
+         */
+
+        const token =
+          await getVoiceToken(channelId);
+
+        if (cancelled) {
+          return;
+        }
+
+        /*
+         * --------------------------------------------------------
+         * WebSocket signaling
+         * --------------------------------------------------------
+         */
+
+        ws = new WebSocket(
+          `ws://localhost:9000/sfu/${channelId}?token=${encodeURIComponent(token)}`,
+        );
+
+        ws.onopen = async () => {
+          if (cancelled || !peerConnection || !ws) {
+            return;
+          }
+
+          console.log(
+            "SFU TEST: signaling WebSocket open"
+          );
+
           try {
-            const message =
-              JSON.parse(
-                event.data
-              ) as SignalMessage;
+            const offer =
+              await peerConnection.createOffer();
+
+            if (cancelled) {
+              return;
+            }
+
+            await peerConnection.setLocalDescription(
+              offer
+            );
+
+            /*
+             * Non-trickle ICE for this first test.
+             */
+
+            if (
+              peerConnection.iceGatheringState !==
+              "complete"
+            ) {
+              await new Promise<void>(
+                (resolve) => {
+                  const check = () => {
+                    if (
+                      peerConnection?.iceGatheringState ===
+                      "complete"
+                    ) {
+                      peerConnection.removeEventListener(
+                        "icegatheringstatechange",
+                        check
+                      );
+
+                      resolve();
+                    }
+                  };
+
+                  peerConnection.addEventListener(
+                    "icegatheringstatechange",
+                    check
+                  );
+
+                  check();
+                }
+              );
+            }
+
+            if (
+              cancelled ||
+              !peerConnection ||
+              !ws
+            ) {
+              return;
+            }
+
+            const localDescription =
+              peerConnection.localDescription;
+
+            if (!localDescription) {
+              throw new Error(
+                "SFU TEST: local description is missing"
+              );
+            }
 
             console.log(
-              "VOICE: SIGNAL RECEIVE",
+              "SFU TEST: sending offer",
+              {
+                sdpLength:
+                  localDescription.sdp.length,
+
+                hasCandidate:
+                  localDescription.sdp.includes(
+                    "a=candidate:"
+                  ),
+              }
+            );
+
+            ws.send(
+              JSON.stringify({
+                type: "offer",
+                sdp: localDescription.sdp,
+              })
+            );
+          } catch (error) {
+            if (!cancelled) {
+              console.error(
+                "SFU TEST: offer failed",
+                error
+              );
+            }
+          }
+        };
+
+        ws.onmessage = async (event) => {
+          try {
+            const message =
+              JSON.parse(event.data);
+
+            console.log(
+              "SFU TEST: signaling message",
               message
             );
 
-            switch (
-              message.type
+            /*
+             * --------------------------------------------------------
+             * SFU -> Browser offer
+             *
+             * Happens when the SFU adds another user's
+             * track to this PeerConnection.
+             * --------------------------------------------------------
+             */
+
+            if (
+              message.type === "offer" &&
+              typeof message.sdp === "string"
             ) {
-              /*
-               * ------------------------------------------------
-               * USER JOINED
-               * ------------------------------------------------
-               */
-
-              case "user_joined": {
-                const remoteUserId = toUserId(message.user_id)
-
-                if (
-                  remoteUserId ===
-                    null ||
-                  remoteUserId ===
-                    currentUserId
-                ) {
-                  return;
-                }
-
-                /*
-                 * Lower ID is always offerer.
-                 */
-                if (
-                  currentUserId <
-                  remoteUserId
-                ) {
-                  await createOffer(
-                    remoteUserId
-                  );
-                }
-
-                break;
+              if (!peerConnection || !ws || cancelled) {
+                return;
               }
 
-              /*
-               * ------------------------------------------------
-               * OFFER
-               * ------------------------------------------------
-               */
+              console.log(
+                "SFU TEST: received SFU offer"
+              );
 
-              case "offer": {
-                const remoteUserId = toUserId(message.user_id)
+              await peerConnection.setRemoteDescription({
+                type: "offer",
+                sdp: message.sdp,
+              });
 
-                if (
-                  remoteUserId ===
-                    null ||
-                  !message.sdp
-                ) {
-                  console.error(
-                    "VOICE: INVALID OFFER",
-                    message
-                  );
+              console.log(
+                "SFU TEST: SFU offer set"
+              );
 
-                  return;
-                }
+              const answer =
+                await peerConnection.createAnswer();
 
-                await handleOffer(
-                  remoteUserId,
-                  message.sdp
-                );
+              await peerConnection.setLocalDescription(
+                answer
+              );
 
-                break;
-              }
+              const localDescription =
+                peerConnection.localDescription;
 
-              /*
-               * ------------------------------------------------
-               * ANSWER
-               * ------------------------------------------------
-               */
-
-              case "answer": {
-                const remoteUserId = toUserId(message.user_id)
-
-                if (
-                  remoteUserId ===
-                    null ||
-                  !message.sdp
-                ) {
-                  console.error(
-                    "VOICE: INVALID ANSWER",
-                    message
-                  );
-
-                  return;
-                }
-
-                await handleAnswer(
-                  remoteUserId,
-                  message.sdp
-                );
-
-                break;
-              }
-
-              /*
-               * ------------------------------------------------
-               * ICE CANDIDATE
-               * ------------------------------------------------
-               *
-               * This shouldn't be used by the current local
-               * configuration because ICE is embedded in SDP.
-               *
-               * We still support it so the signaling protocol
-               * remains compatible.
-               */
-
-              case "ice_candidate": {
-                console.log(
-                  "VOICE: IGNORING TRICKLE ICE",
-                  message
-                );
-
-                break;
-              }
-
-              /*
-               * ------------------------------------------------
-               * USER LEFT
-               * ------------------------------------------------
-               */
-
-              case "user_left": {
-                const remoteUserId = toUserId(message)
-
-                if (
-                  remoteUserId !==
-                  null
-                ) {
-                  removePeer(
-                    remoteUserId
-                  );
-                }
-
-                break;
-              }
-
-              default: {
-                console.log(
-                  "VOICE: UNKNOWN SIGNAL",
-                  message
+              if (!localDescription) {
+                throw new Error(
+                  "SFU TEST: local description missing after renegotiation"
                 );
               }
+
+              console.log(
+                "SFU TEST: sending renegotiation answer"
+              );
+
+              ws.send(
+                JSON.stringify({
+                  type: "answer",
+                  sdp: localDescription.sdp,
+                })
+              );
+
+              return;
+            }
+
+            /*
+             * --------------------------------------------------------
+             * SFU -> Browser initial answer
+             * --------------------------------------------------------
+             */
+
+            if (
+              message.type === "answer" &&
+              typeof message.sdp === "string"
+            ) {
+              if (!peerConnection || cancelled) {
+                return;
+              }
+
+              await peerConnection.setRemoteDescription({
+                type: "answer",
+                sdp: message.sdp,
+              });
+
+              console.log(
+                "SFU TEST: remote answer set"
+              );
+
+              return;
             }
           } catch (error) {
+            if (!cancelled) {
+              console.error(
+                "SFU TEST: failed handling signaling message",
+                error
+              );
+            }
+          }
+        };
+
+        ws.onerror = (event) => {
+          if (!cancelled) {
             console.error(
-              "VOICE: SIGNAL HANDLING FAILED",
-              error
+              "SFU TEST: WebSocket error",
+              event
             );
           }
         };
+
+        ws.onclose = (event) => {
+          if (!cancelled) {
+            console.log(
+              "SFU TEST: WebSocket closed",
+              {
+                code: event.code,
+                reason: event.reason,
+              }
+            );
+          }
+        };
+      } catch (error) {
+        if (!cancelled) {
+          console.error(
+            "SFU TEST: startup failed",
+            error
+          );
+        }
+      }
     }
 
     start();
 
     /*
-     * ------------------------------------------------------------
-     * CLEANUP
-     * ------------------------------------------------------------
+     * --------------------------------------------------------
+     * Cleanup
+     * --------------------------------------------------------
      */
 
     return () => {
-      console.log(
-        "VOICE: CLEANUP",
-        {
-          generation,
-          channelId,
-          currentUserId,
-        }
-      );
-
       cancelled = true;
-
-
-      /*
-       * Close peers.
-       */
-
-      for (
-        const [
-          remoteUserId,
-          peer,
-        ] of peers
-      ) {
-        console.log(
-          "VOICE: CLOSING PEER",
-          remoteUserId
-        );
-
-        try {
-          peer.pc.ontrack =
-            null;
-
-          peer.pc.onicecandidate =
-            null;
-
-          peer.pc.onconnectionstatechange =
-            null;
-
-          peer.pc.oniceconnectionstatechange =
-            null;
-
-          peer.pc.close();
-        } catch {}
-
-        try {
-          peer.audio.pause();
-          peer.audio.srcObject =
-            null;
-          peer.audio.remove();
-        } catch {}
-      }
-
-      peers.clear();
 
       /*
        * Stop microphone.
        */
 
-
-      if (localStream) {
-        localStream 
+      if (stream) {
+        stream
           .getTracks()
-          .forEach((track) =>
-            track.stop()
-          );
+          .forEach((track) => track.stop());
 
-        localStream =
-          null;
+        stream = null;
+      }
+
+      /*
+       * Stop remote audio.
+       */
+
+      for (const audio of remoteAudios) {
+        audio.pause();
+        audio.srcObject = null;
+      }
+
+      remoteAudios.length = 0;
+
+      /*
+       * Close PeerConnection.
+       */
+
+      if (pc) {
+        pc.ontrack = null;
+        pc.onicecandidate = null;
+        pc.onicegatheringstatechange = null;
+        pc.oniceconnectionstatechange = null;
+        pc.onconnectionstatechange = null;
+        pc.onsignalingstatechange = null;
+
+        try {
+          pc.close();
+        } catch {}
+
+        pc = null;
       }
 
       /*
        * Close WebSocket.
        */
 
-
       if (ws) {
+        ws.onopen = null;
+        ws.onmessage = null;
+        ws.onerror = null;
+        ws.onclose = null;
+
         try {
           ws.close();
         } catch {}
 
+        ws = null;
       }
-
     };
-  }, [
-    channelId,
-    currentUserId,
-  ]);
+  }, [channelId]);
 
   return null;
 }

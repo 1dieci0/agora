@@ -40,8 +40,6 @@ export async function getMe(): Promise<User> {
 }
 
 
-
-
 export async function getServers(): Promise<Server[]> {
   const response = await fetch(`${API_URL}/api/servers`, {
     credentials: "include",
@@ -72,7 +70,6 @@ export async function getChannels(serverID: number): Promise<Channel[]> {
 
   return data.channels;
 }
-
 
 
 export async function getMessages(
@@ -340,4 +337,31 @@ export async function uploadAvatar(file: File): Promise<User> {
   const data = await response.json();
 
   return data.user;
+}
+
+
+export async function getVoiceToken(
+  channelId: number,
+): Promise<string> {
+  const response = await fetch(
+    `${API_URL}/api/voice/token?channel_id=${channelId}`,
+    {
+      method: "POST",
+      credentials: "include",
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      `Failed to get voice token: ${response.status}`,
+    );
+  }
+
+  const data = await response.json();
+
+  if (typeof data.token !== "string") {
+    throw new Error("Voice token missing from response");
+  }
+
+  return data.token;
 }

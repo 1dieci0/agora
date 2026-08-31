@@ -26,11 +26,15 @@ func (r *Room) AddPeer(peer *Peer) {
 	r.peers[peer.UserID] = peer
 }
 
-func (r *Room) RemovePeer(userID int) {
+func (r *Room) RemovePeer(userID int) *Peer {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
+	peer := r.peers[userID]
+
 	delete(r.peers, userID)
+
+	return peer
 }
 
 func (r *Room) GetPeer(userID int) *Peer {

@@ -10,6 +10,7 @@ import (
 
 	"agora/internal/channels"
 	"agora/internal/servers"
+	"agora/internal/sfu"
 	"agora/internal/users"
 
 	"github.com/coder/websocket"
@@ -365,4 +366,103 @@ func mustMarshal(message VoiceMessage) []byte {
 	}
 
 	return data
+}
+
+func (h *Handler) CreateToken(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
+	log.Println("VOICE: CreateToken endpoint was reached")
+
+	userID, ok := users.UserIDFromContext(r.Context())
+	if !ok {
+		http.Error(
+			w,
+			"Unauthorized",
+			http.StatusUnauthorized,
+		)
+		return
+	}
+
+	channelID, err := strconv.Atoi(
+		r.URL.Query().Get("channel_id"),
+	)
+	if err != nil || channelID <= 0 {
+		http.Error(
+			w,
+			"Invalid channel ID",
+			http.StatusBadRequest,
+		)
+		return
+	}
+
+	channel, err := h.channelRepo.GetByID(channelID)
+	if err != nil {
+		http.Error(
+			w,
+			"Channel not found",
+			http.StatusNotFound,
+		)
+		return
+	}
+
+	if channel.Type != "voice" {
+		http.Error(
+			w,
+			"Not a voice channel",
+			http.StatusBadRequest,
+		)
+		return
+	}
+
+	isMember, err := h.serverRepo.IsMember(
+		userID,
+		channel.ServerID,
+	)
+	if err != nil {
+		http.Error(
+			w,
+			"Internal server error",
+			http.StatusInternalServerError,
+		)
+		return
+	}
+
+	if !isMember {
+		http.Error(
+			w,
+			"Forbidden",
+			http.StatusForbidden,
+		)
+		return
+	}
+
+	token, err := sfu.CreateSFUToken(
+		userID,
+		channelID,
+	)
+	if err != nil {
+		log.Printf(
+			"VOICE: failed creating SFU token user=%d channel=%d: %v",
+			userID,
+			channelID,
+			err,
+		)
+
+		http.Error(
+			w,
+			"Internal server error",
+			http.StatusInternalServerError,
+		)
+		return
+	}
+
+	w.Header().Set(
+		"Content-Type",
+		"application/json",
+	)
+
+	json.NewEncoder(w).Encode(map[string]string{
+		"token": token,
+	})
 }

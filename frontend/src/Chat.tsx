@@ -268,7 +268,6 @@ function Chat({ user, onLogout, onUserUpdate }: ChatProps) {
       {activeVoiceChannelId !== null && (
         <VoiceConnection
           channelId={activeVoiceChannelId}
-          currentUserId={user.id}
         />
       )}
 
