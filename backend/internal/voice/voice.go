@@ -1,6 +1,7 @@
 package voice
 
 import (
+	"context"
 	"sync"
 
 	"github.com/coder/websocket"
@@ -12,29 +13,71 @@ type Client struct {
 
 	Conn *websocket.Conn
 
-	writeMu sync.Mutex
+	send chan []byte
 
-	closeMu sync.Mutex
-	closed  bool
+	closeOnce sync.Once
+	done      chan struct{}
 }
 
-func (c *Client) close(
-	status websocket.StatusCode,
-	reason string,
-) bool {
-	c.closeMu.Lock()
-	defer c.closeMu.Unlock()
+func NewClient(
+	userID int,
+	channelID int,
+	conn *websocket.Conn,
+) *Client {
+	return &Client{
+		UserID:    userID,
+		ChannelID: channelID,
+		Conn:      conn,
 
-	if c.closed {
+		send: make(chan []byte, 32),
+		done: make(chan struct{}),
+	}
+}
+
+func (c *Client) writeLoop(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+
+		case <-c.done:
+			return
+
+		case message := <-c.send:
+			if err := c.Conn.Write(
+				ctx,
+				websocket.MessageText,
+				message,
+			); err != nil {
+				return
+			}
+		}
+	}
+}
+
+func (c *Client) Send(message []byte) bool {
+	select {
+	case <-c.done:
+		return false
+
+	case c.send <- message:
+		return true
+
+	default:
 		return false
 	}
+}
 
-	c.closed = true
+func (c *Client) Close(
+	status websocket.StatusCode,
+	reason string,
+) {
+	c.closeOnce.Do(func() {
+		close(c.done)
 
-	_ = c.Conn.Close(
-		status,
-		reason,
-	)
-
-	return true
+		_ = c.Conn.Close(
+			status,
+			reason,
+		)
+	})
 }
