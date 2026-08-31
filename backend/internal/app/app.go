@@ -21,11 +21,11 @@ type App struct {
 	channels *channels.Handler
 	messages *messages.Handler
 
-	textHub      *realtime.Hub
+	textHub  *realtime.Hub
 	realtime *realtime.Handler
 
 	voiceHub *voice.Hub
-	voice 	 *voice.Handler
+	voice    *voice.Handler
 }
 
 func NewApp() (*App, error) {
@@ -73,7 +73,7 @@ func NewApp() (*App, error) {
 		realtime: realtime.NewHandler(channelRepo, serverRepo, hub),
 
 		voiceHub: voiceHub,
-		voice: voice.NewHandler(voiceHub, channelRepo, serverRepo),
+		voice:    voice.NewHandler(voiceHub, channelRepo, serverRepo),
 	}
 
 	app.RegisterRoutes()
@@ -214,8 +214,6 @@ func (app *App) RegisterRoutes() {
 		app.users.RequireAuth(app.realtime.Connect),
 	)
 
-
-
 	//uploads
 
 	app.router.Handle(
@@ -226,10 +224,10 @@ func (app *App) RegisterRoutes() {
 		),
 	)
 
-
 	//voice
 	app.router.HandleFunc(
 		"GET /ws/voice/{channelID}",
 		app.users.RequireAuth(app.voice.Connect),
 	)
+
 }
