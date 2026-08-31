@@ -39,6 +39,9 @@ func (h *Handler) writeMessage(
 	client *Client,
 	message []byte,
 ) error {
+	client.writeMu.Lock()
+	defer client.writeMu.Unlock()
+
 	ctx, cancel :=
 		context.WithTimeout(
 			context.Background(),
@@ -184,7 +187,7 @@ func (h *Handler) Connect(
 			channelID,
 		)
 
-		_ = previousClient.Conn.Close(
+		previousClient.close(
 			websocket.StatusNormalClosure,
 			"replaced by newer connection",
 		)
@@ -221,11 +224,12 @@ func (h *Handler) Connect(
 	defer func() {
 		removed := h.hub.Remove(client)
 
+		client.close(
+			websocket.StatusNormalClosure,
+			"",
+		)
+
 		if !removed {
-			/*
-			* This connection was already replaced by a newer
-			* connection for the same user.
-			 */
 			return
 		}
 
@@ -313,6 +317,11 @@ func (h *Handler) broadcast(
 				target.UserID,
 				err,
 			)
+
+			h.disconnectClient(
+				target,
+				"websocket write failed",
+			)
 		}
 
 		return
@@ -345,6 +354,11 @@ func (h *Handler) broadcast(
 				voiceMessage.Type,
 				client.UserID,
 				err,
+			)
+
+			h.disconnectClient(
+				client,
+				"websocket broadcast write failed",
 			)
 		}
 	}
@@ -380,6 +394,8 @@ func (h *Handler) broadcastEvent(
 				client.UserID,
 				err,
 			)
+
+			h.removeDeadClient(client)
 		}
 	}
 }
@@ -391,4 +407,44 @@ func mustMarshal(message VoiceMessage) []byte {
 	}
 
 	return data
+}
+
+func (h *Handler) disconnectClient(
+	client *Client,
+	reason string,
+) {
+	log.Printf(
+		"VOICE: disconnecting user=%d channel=%d reason=%s",
+		client.UserID,
+		client.ChannelID,
+		reason,
+	)
+
+	removed := h.removeDeadClient(client)
+
+	if !removed {
+		return
+	}
+
+	h.broadcastEvent(
+		client.ChannelID,
+		VoiceMessage{
+			Type:   "user_left",
+			UserID: client.UserID,
+		},
+		client,
+	)
+}
+
+func (h *Handler) removeDeadClient(
+	client *Client,
+) bool {
+	removed := h.hub.Remove(client)
+
+	client.close(
+		websocket.StatusGoingAway,
+		"connection unavailable",
+	)
+
+	return removed
 }
