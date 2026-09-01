@@ -2,6 +2,7 @@ package sfu
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"strconv"
@@ -192,9 +193,9 @@ func (s *Server) HandleHTTP(
 		/*
 		* Remove the peer from the room first.
 		 */
-		removedPeer := room.RemovePeer(userID)
+		removed := room.RemovePeer(peer)
 
-		if removedPeer == nil {
+		if !removed {
 			return
 		}
 
@@ -425,8 +426,8 @@ func (s *Server) forwardTrack(
 		localTrack, err :=
 			webrtc.NewTrackLocalStaticRTP(
 				codec.RTPCodecCapability,
-				"audio",
-				"agora",
+				fmt.Sprintf("audio-%d", publisher.UserID),
+				fmt.Sprintf("user-%d", publisher.UserID),
 			)
 
 		if err != nil {

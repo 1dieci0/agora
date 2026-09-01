@@ -16,6 +16,7 @@ export default function VoiceConnection({
     let ws: WebSocket | null = null;
 
     const remoteAudios: HTMLAudioElement[] = [];
+    let negotiationChain = Promise.resolve();
 
     async function start() {
       try {
@@ -287,109 +288,104 @@ export default function VoiceConnection({
           }
         };
 
-        ws.onmessage = async (event) => {
-          try {
-            const message =
-              JSON.parse(event.data);
-
-            console.log(
-              "SFU TEST: signaling message",
-              message
-            );
-
-            /*
-             * --------------------------------------------------------
-             * SFU -> Browser offer
-             *
-             * Happens when the SFU adds another user's
-             * track to this PeerConnection.
-             * --------------------------------------------------------
-             */
-
-            if (
-              message.type === "offer" &&
-              typeof message.sdp === "string"
-            ) {
-              if (!peerConnection || !ws || cancelled) {
+        ws.onmessage = (event) => {
+          negotiationChain = negotiationChain
+            .then(async () => {
+              if (cancelled || !peerConnection || !ws) {
                 return;
               }
 
-              console.log(
-                "SFU TEST: received SFU offer"
-              );
-
-              await peerConnection.setRemoteDescription({
-                type: "offer",
-                sdp: message.sdp,
-              });
+              const message = JSON.parse(event.data);
 
               console.log(
-                "SFU TEST: SFU offer set"
+                "SFU TEST: signaling message",
+                message
               );
 
-              const answer =
-                await peerConnection.createAnswer();
+              /*
+              * --------------------------------------------------------
+              * SFU -> Browser offer
+              *
+              * Serialize these so multiple SFU renegotiations
+              * cannot modify the PeerConnection simultaneously.
+              * --------------------------------------------------------
+              */
 
-              await peerConnection.setLocalDescription(
-                answer
-              );
+              if (
+                message.type === "offer" &&
+                typeof message.sdp === "string"
+              ) {
+                console.log(
+                  "SFU TEST: received SFU offer"
+                );
 
-              const localDescription =
-                peerConnection.localDescription;
+                await peerConnection.setRemoteDescription({
+                  type: "offer",
+                  sdp: message.sdp,
+                });
 
-              if (!localDescription) {
-                throw new Error(
-                  "SFU TEST: local description missing after renegotiation"
+                console.log(
+                  "SFU TEST: SFU offer set"
+                );
+
+                const answer =
+                  await peerConnection.createAnswer();
+
+                await peerConnection.setLocalDescription(
+                  answer
+                );
+
+                const localDescription =
+                  peerConnection.localDescription;
+
+                if (!localDescription) {
+                  throw new Error(
+                    "SFU TEST: local description missing after renegotiation"
+                  );
+                }
+
+                console.log(
+                  "SFU TEST: sending renegotiation answer"
+                );
+
+                ws.send(
+                  JSON.stringify({
+                    type: "answer",
+                    sdp: localDescription.sdp,
+                  })
+                );
+
+                return;
+              }
+
+              /*
+              * --------------------------------------------------------
+              * SFU -> Browser initial answer
+              * --------------------------------------------------------
+              */
+
+              if (
+                message.type === "answer" &&
+                typeof message.sdp === "string"
+              ) {
+                await peerConnection.setRemoteDescription({
+                  type: "answer",
+                  sdp: message.sdp,
+                });
+
+                console.log(
+                  "SFU TEST: remote answer set"
                 );
               }
-
-              console.log(
-                "SFU TEST: sending renegotiation answer"
-              );
-
-              ws.send(
-                JSON.stringify({
-                  type: "answer",
-                  sdp: localDescription.sdp,
-                })
-              );
-
-              return;
-            }
-
-            /*
-             * --------------------------------------------------------
-             * SFU -> Browser initial answer
-             * --------------------------------------------------------
-             */
-
-            if (
-              message.type === "answer" &&
-              typeof message.sdp === "string"
-            ) {
-              if (!peerConnection || cancelled) {
-                return;
+            })
+            .catch((error) => {
+              if (!cancelled) {
+                console.error(
+                  "SFU TEST: failed handling signaling message",
+                  error
+                );
               }
-
-              await peerConnection.setRemoteDescription({
-                type: "answer",
-                sdp: message.sdp,
-              });
-
-              console.log(
-                "SFU TEST: remote answer set"
-              );
-
-              return;
-            }
-          } catch (error) {
-            if (!cancelled) {
-              console.error(
-                "SFU TEST: failed handling signaling message",
-                error
-              );
-            }
-          }
+            });
         };
 
         ws.onerror = (event) => {

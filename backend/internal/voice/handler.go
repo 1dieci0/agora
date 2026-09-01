@@ -372,8 +372,6 @@ func (h *Handler) CreateToken(
 	w http.ResponseWriter,
 	r *http.Request,
 ) {
-	log.Println("VOICE: CreateToken endpoint was reached")
-
 	userID, ok := users.UserIDFromContext(r.Context())
 	if !ok {
 		http.Error(
