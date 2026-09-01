@@ -6,6 +6,14 @@ import (
 	"github.com/coder/websocket"
 )
 
+type Client struct {
+	Conn     *websocket.Conn
+	UserID   int
+	ServerID int
+
+	send chan []byte
+}
+
 func (c *Client) writeLoop() {
 	for {
 		message, ok := <-c.send

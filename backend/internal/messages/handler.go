@@ -122,7 +122,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.hub.Broadcast(channelID, eventData)
+	h.hub.BroadcastServer(serverID, eventData)
 
 	response := MessageResponse{
 		Message: message,
@@ -240,6 +240,20 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	channel, err := h.channelRepo.GetByID(message.ChannelID)
+
+	if err == sql.ErrNoRows {
+		http.Error(w, "Channel not found", http.StatusNotFound)
+		return
+	}
+
+	if err != nil {
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	serverID := channel.ServerID
+
 	if err := h.repo.Update(messageID, data.Content); err != nil {
 		http.Error(w, "Could not update message", http.StatusInternalServerError)
 		return
@@ -258,7 +272,7 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.hub.Broadcast(message.ChannelID, eventData)
+	h.hub.BroadcastServer(serverID, eventData)
 
 	response := MessageResponse{
 		Message: message,
@@ -302,6 +316,20 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	channel, err := h.channelRepo.GetByID(message.ChannelID)
+
+	if err == sql.ErrNoRows {
+		http.Error(w, "Channel not found", http.StatusNotFound)
+		return
+	}
+
+	if err != nil {
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	serverID := channel.ServerID
+
 	if err := h.repo.Delete(messageID); err != nil {
 		http.Error(w, "Could not delete message", http.StatusInternalServerError)
 		return
@@ -310,9 +338,11 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	event := realtime.Event{
 		Type: "message_deleted",
 		Data: struct {
-			ID int `json:"id"`
+			ID        int `json:"id"`
+			ChannelID int `json:"channel_id"`
 		}{
-			ID: message.ID,
+			ID:        message.ID,
+			ChannelID: message.ChannelID,
 		},
 	}
 
@@ -322,7 +352,7 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.hub.Broadcast(message.ChannelID, eventData)
+	h.hub.BroadcastServer(serverID, eventData)
 
 	w.WriteHeader(http.StatusNoContent)
 }

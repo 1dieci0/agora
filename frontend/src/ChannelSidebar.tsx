@@ -1,4 +1,4 @@
-import type { Channel} from "./types";
+import type { Channel, VoiceParticipant} from "./types";
 import VoiceChannel from "./VoiceChannel";
 
 type ChannelSidebarProps = {
@@ -10,6 +10,7 @@ type ChannelSidebarProps = {
   onInvite: () => void;
   activeVoiceChannelId: number | null;
   onJoinVoiceChannel: (channelId: number) => void;
+  voiceParticipants: VoiceParticipant[];
 };
 
 function ChannelSidebar({
@@ -21,6 +22,7 @@ function ChannelSidebar({
   onInvite,
   activeVoiceChannelId,
   onJoinVoiceChannel,
+  voiceParticipants,
 }: ChannelSidebarProps) {
   const textChannels = channels.filter(
     (channel) => channel.type === "text",
@@ -87,14 +89,51 @@ function ChannelSidebar({
           </div>
 
           {voiceChannels.map((channel) => (
-            <VoiceChannel
-              key={channel.id}
-              channel={channel}
-              active={
-                channel.id === activeVoiceChannelId
-              }
-              onJoin={onJoinVoiceChannel}
-            />
+            <div key={channel.id}>
+              <VoiceChannel
+                channel={channel}
+                active={
+                  channel.id === activeVoiceChannelId
+                }
+                onJoin={onJoinVoiceChannel}
+              />
+
+              {channel.id === activeVoiceChannelId && (
+                <div className="voice-participant-list">
+                  {voiceParticipants
+                  .filter(
+                    (participant) =>
+                      participant.channelId === channel.id,
+                  )
+                  .map((participant) => (
+                    <div
+                      key={participant.id}
+                      className={
+                        participant.speaking
+                          ? "voice-participant speaking"
+                          : "voice-participant"
+                      }
+                    >
+                      <div className="voice-participant-avatar">
+                        {participant.username
+                          .charAt(0)
+                          .toUpperCase()}
+                      </div>
+
+                      <span className="voice-participant-name">
+                        {participant.username}
+                      </span>
+
+                      {participant.muted && (
+                        <span className="voice-participant-muted">
+                          🔇
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           ))}
         </div>
       </div>

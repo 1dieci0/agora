@@ -1,9 +1,11 @@
-import { useEffect } from "react";
+import { useEffect} from "react";
 import { getVoiceToken } from "./api";
+import type { Member} from "./types";
 
 type VoiceConnectionProps = {
   channelId: number;
 };
+
 
 export default function VoiceConnection({
   channelId,
@@ -17,6 +19,7 @@ export default function VoiceConnection({
 
     const remoteAudios: HTMLAudioElement[] = [];
     let negotiationChain = Promise.resolve();
+
 
     async function start() {
       try {
@@ -377,6 +380,11 @@ export default function VoiceConnection({
                   "SFU TEST: remote answer set"
                 );
               }
+
+
+              
+
+
             })
             .catch((error) => {
               if (!cancelled) {
@@ -428,6 +436,7 @@ export default function VoiceConnection({
 
     return () => {
       cancelled = true;
+
 
       /*
        * Stop microphone.
@@ -488,7 +497,9 @@ export default function VoiceConnection({
         ws = null;
       }
     };
-  }, [channelId]);
+  }, [
+    channelId,
+  ]);
 
   return null;
 }

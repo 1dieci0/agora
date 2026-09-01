@@ -10,15 +10,20 @@ import {
   sendMessage,
   updateMessage,
 } from "./api";
-import { connectToChannel } from "./websocket";
-import type { Channel, Message, User } from "./types";
+import type { Channel, Message, User , RealtimeEvent} from "./types";
+
 
 type ChatWindowProps = {
   user: User;
   channel: Channel | null;
+  realtimeEvent: RealtimeEvent | null;
 };
 
-function ChatWindow({ user, channel }: ChatWindowProps) {
+function ChatWindow({
+  user,
+  channel,
+  realtimeEvent,
+}: ChatWindowProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [content, setContent] = useState("");
   const [loading, setLoading] = useState(false);
@@ -31,6 +36,56 @@ function ChatWindow({ user, channel }: ChatWindowProps) {
 
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const messageInputRef = useRef<HTMLTextAreaElement | null>(null);
+
+
+  useEffect(() => {
+    if (!realtimeEvent || !channel) return;
+
+    switch (realtimeEvent.type) {
+      case "message_created": {
+        const message = realtimeEvent.data;
+
+        if (message.channel_id !== channel.id) return;
+
+        setMessages((current) => {
+          if (current.some((m) => m.id === message.id)) {
+            return current;
+          }
+
+          return [...current, message];
+        });
+
+        break;
+      }
+
+      case "message_updated": {
+        const message = realtimeEvent.data;
+
+        if (message.channel_id !== channel.id) return;
+
+        setMessages((current) =>
+          current.map((m) =>
+            m.id === message.id ? message : m
+          )
+        );
+
+        break;
+      }
+
+      case "message_deleted": {
+        const { id, channel_id } = realtimeEvent.data;
+
+        if (channel_id !== channel.id) return;
+
+        setMessages((current) =>
+          current.filter((m) => m.id !== id)
+        );
+
+        break;
+      }
+    }
+  }, [realtimeEvent, channel]);
+
 
   useEffect(() => {
     if (channel === null) {
@@ -60,47 +115,6 @@ function ChatWindow({ user, channel }: ChatWindowProps) {
     });
   }, [messages]);
 
-  useEffect(() => {
-    if (channel === null) {
-      return;
-    }
-
-    const socket = connectToChannel(channel.id, (event) => {
-      if (event.type === "message_created") {
-        const message = event.data as Message;
-
-        setMessages((current) => {
-          if (current.some((item) => item.id === message.id)) {
-            return current;
-          }
-
-          return [...current, message];
-        });
-      }
-
-      if (event.type === "message_updated") {
-        const message = event.data as Message;
-
-        setMessages((current) =>
-          current.map((item) =>
-            item.id === message.id ? message : item,
-          ),
-        );
-      }
-
-      if (event.type === "message_deleted") {
-        const deleted = event.data as { id: number };
-
-        setMessages((current) =>
-          current.filter((item) => item.id !== deleted.id),
-        );
-      }
-    });
-
-    return () => {
-      socket.close();
-    };
-  }, [channel]);
 
   function handleContentChange(
     event: ChangeEvent<HTMLTextAreaElement>,

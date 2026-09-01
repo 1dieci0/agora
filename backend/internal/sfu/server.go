@@ -199,6 +199,8 @@ func (s *Server) HandleHTTP(
 			return
 		}
 
+		// existing removeForwardedTracks...
+
 		/*
 		* Remove this user's forwarded tracks
 		* from every remaining subscriber.

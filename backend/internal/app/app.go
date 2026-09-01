@@ -210,7 +210,7 @@ func (app *App) RegisterRoutes() {
 
 	//realtime
 	app.router.HandleFunc(
-		"GET /ws/channels/{channelID}",
+		"GET /ws/servers/{serverID}",
 		app.users.RequireAuth(app.realtime.Connect),
 	)
 

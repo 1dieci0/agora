@@ -1,6 +1,26 @@
-import { useEffect, useState } from "react";
-import { getChannels, getServers, createServer, createChannel, createInvite, joinServer, getMembers} from "./api";
-import type { Channel, Server, User, Member } from "./types";
+import { useEffect, useRef, useState } from "react";
+import {
+  getChannels,
+  getServers,
+  createServer,
+  createChannel,
+  createInvite,
+  joinServer,
+  getMembers,
+  API_URL,
+} from "./api";
+
+import type {
+  Channel,
+  Server,
+  User,
+  Member,
+  VoiceParticipant,
+  Message,
+  RealtimeEvent,
+  VoiceState,
+} from "./types";
+
 import ServerSidebar from "./ServerSidebar";
 import ChannelSidebar from "./ChannelSidebar";
 import ChatWindow from "./ChatWindow";
@@ -13,11 +33,15 @@ import UserPanel from "./UserPanel";
 import ProfileModal from "./ProfileModal";
 import VoiceConnection from "./VoiceConnection";
 
+
 type ChatProps = {
   user: User;
   onLogout: () => void;
   onUserUpdate: (user: User) => void;
 };
+
+
+
 
 function Chat({ user, onLogout, onUserUpdate }: ChatProps) {
   const [servers, setServers] = useState<Server[]>([]);
@@ -28,6 +52,12 @@ function Chat({ user, onLogout, onUserUpdate }: ChatProps) {
   const [showJoinServer, setShowJoinServer] = useState(false);
   const [members, setMembers] = useState<Member[]>([]);
   const [showProfile, setShowProfile] = useState(false);
+  
+  const [realtimeMessageEvent, setRealtimeMessageEvent] =
+    useState<RealtimeEvent | null>(null);
+
+  const [voiceParticipants, setVoiceParticipants] =
+    useState<VoiceParticipant[]>([]);
 
   const [selectedServerId, setSelectedServerId] =
     useState<number | null>(null);
@@ -37,6 +67,17 @@ function Chat({ user, onLogout, onUserUpdate }: ChatProps) {
 
   const [activeVoiceChannelId, setActiveVoiceChannelId] =
     useState<number | null>(null);
+
+  /*
+   * The realtime WebSocket for the currently selected server.
+   */
+  const realtimeSocketRef = useRef<WebSocket | null>(null);
+
+  /*
+   * -------------------------
+   * Load servers
+   * -------------------------
+   */
 
   useEffect(() => {
     async function loadServers() {
@@ -55,6 +96,12 @@ function Chat({ user, onLogout, onUserUpdate }: ChatProps) {
 
     loadServers();
   }, []);
+
+  /*
+   * -------------------------
+   * Load channels
+   * -------------------------
+   */
 
   useEffect(() => {
     if (selectedServerId === null) {
@@ -86,6 +133,12 @@ function Chat({ user, onLogout, onUserUpdate }: ChatProps) {
     loadChannels();
   }, [selectedServerId]);
 
+  /*
+   * -------------------------
+   * Load members
+   * -------------------------
+   */
+
   useEffect(() => {
     if (selectedServerId === null) {
       setMembers([]);
@@ -100,11 +153,7 @@ function Chat({ user, onLogout, onUserUpdate }: ChatProps) {
 
         setMembers(members);
       } catch (error) {
-        console.error(
-          "Could not load members:",
-          error,
-        );
-
+        console.error("Could not load members:", error);
         setMembers([]);
       }
     }
@@ -112,25 +161,378 @@ function Chat({ user, onLogout, onUserUpdate }: ChatProps) {
     loadMembers();
   }, [selectedServerId]);
 
-  async function handleJoinServer(code: string) {
+  /*
+   * -------------------------
+   * Realtime server socket
+   * -------------------------
+   *
+   * This socket is NOT the SFU socket.
+   *
+   * It is responsible for:
+   * - messages
+   * - voice presence
+   * - future server events
+   *
+   * The SFU remains responsible for:
+   * - WebRTC
+   * - audio
+   * - tracks
+   */
 
-    const server = await joinServer(code);
+  useEffect(() => {
+    if (selectedServerId === null) {
+      return;
+    }
 
-    setServers((currentServers) => { 
-      const alreadyExists = currentServers.some(
-        (currentServer) => currentServer.id === server.id, 
+    const serverID = selectedServerId;
+
+    /*
+     * Close the previous realtime socket first.
+     */
+    if (realtimeSocketRef.current) {
+      realtimeSocketRef.current.close();
+      realtimeSocketRef.current = null;
+    }
+
+
+    const WS_URL = API_URL.replace(/^http/, "ws");
+
+    const socket = new WebSocket(
+      `${WS_URL}/ws/servers/${serverID}`
+    );
+
+    realtimeSocketRef.current = socket;
+
+    socket.onopen = () => {
+      console.log(
+        `Realtime connected to server ${serverID}`,
+      );
+    };
+
+    socket.onmessage = (event) => {
+      try {
+        const message: RealtimeEvent =
+          JSON.parse(event.data);
+
+        switch (message.type) {
+          case "voice_state": {
+            updateVoiceParticipants(message.data);
+            break;
+          }
+
+          case "voice_join": {
+            updateVoiceParticipants(message.data);
+            break;
+          }
+
+          case "voice_leave": {
+            removeVoiceParticipant(message.data);
+            break;
+          }
+
+          case "message_created":
+          case "message_updated":
+          case "message_deleted": {
+            setRealtimeMessageEvent(message);
+            break;
+          }
+
+          default:
+            break;
+        }
+      } catch (error) {
+        console.error(
+          "Could not process realtime event:",
+          error,
+        );
+      }
+    };
+
+    socket.onerror = (error) => {
+      console.error(
+        "Realtime WebSocket error:",
+        error,
+      );
+    };
+
+    socket.onclose = () => {
+      console.log(
+        `Realtime disconnected from server ${serverID}`,
       );
 
-    if (alreadyExists) { 
-      return currentServers; 
-    } 
+      if (
+        realtimeSocketRef.current === socket
+      ) {
+        realtimeSocketRef.current = null;
+      }
+    };
 
-    return [ ...currentServers, server]; 
-    }); 
+    return () => {
+      /*
+       * Closing this socket causes the Go server to
+       * LeaveAllVoice() for this user.
+       */
+      socket.close();
 
-    setSelectedServerId(server.id); 
+      if (
+        realtimeSocketRef.current === socket
+      ) {
+        realtimeSocketRef.current = null;
+      }
+    };
+  }, [selectedServerId]);
+
+
+  
+
+  
+  function createVoiceParticipant(
+    state: VoiceState,
+  ): VoiceParticipant | null {
+    const member = members.find(
+      (member) => member.id === state.user_id,
+    );
+
+    if (!member) {
+      return null;
+    }
+
+    return {
+      id: member.id,
+      channelId: state.channel_id,
+      username: member.username,
+      avatar_url: member.avatar_url,
+      muted: false,
+      speaking: false,
+    };
   }
 
+  /*
+   * Rebuild the visible participant list from the
+   * realtime voice state.
+   *
+   * IMPORTANT:
+   *
+   * We only show participants for the voice channel
+   * the current user is actually viewing/joined to.
+   *
+   * The server still knows about everybody.
+   */
+  function updateVoiceParticipants(
+    state: VoiceState | VoiceState[],
+  ) {
+    const states = Array.isArray(state)
+      ? state
+      : [state];
+
+    if (activeVoiceChannelId === null) {
+      setVoiceParticipants([]);
+      return;
+    }
+
+    const participants: VoiceParticipant[] = [];
+
+    for (const voiceState of states) {
+      if (
+        voiceState.channel_id !==
+        activeVoiceChannelId
+      ) {
+        continue;
+      }
+
+      const participant =
+        createVoiceParticipant(voiceState);
+
+      if (!participant) {
+        continue;
+      }
+
+      if (
+        participants.some(
+          (existing) =>
+            existing.id === participant.id,
+        )
+      ) {
+        continue;
+      }
+
+      participants.push(participant);
+    }
+
+    setVoiceParticipants(participants);
+  }
+
+  /*
+   * Remove one participant from the local UI.
+   */
+  function removeVoiceParticipant(
+    state: VoiceState,
+  ) {
+    if (
+      state.channel_id !==
+      activeVoiceChannelId
+    ) {
+      return;
+    }
+
+    setVoiceParticipants((current) =>
+      current.filter(
+        (participant) =>
+          participant.id !== state.user_id,
+      ),
+    );
+  }
+
+  /*
+   * Send an event through the server realtime socket.
+   */
+  function sendRealtimeEvent(
+    event: object,
+  ) {
+    const socket =
+      realtimeSocketRef.current;
+
+    if (!socket) {
+      console.warn(
+        "Realtime socket is not connected",
+      );
+      return;
+    }
+
+    if (
+      socket.readyState !== WebSocket.OPEN
+    ) {
+      console.warn(
+        "Realtime socket is not open",
+      );
+      return;
+    }
+
+    socket.send(JSON.stringify(event));
+  }
+
+  /*
+   * -------------------------
+   * Voice channel
+   * -------------------------
+   */
+
+  function handleJoinVoiceChannel(channelId: number) {
+    const socket = realtimeSocketRef.current;
+
+    if (
+      !socket ||
+      socket.readyState !== WebSocket.OPEN
+    ) {
+      console.error(
+        "Realtime socket is not connected",
+      );
+      return;
+    }
+
+    setActiveVoiceChannelId((current) => {
+      if (current === channelId) {
+        socket.send(
+          JSON.stringify({
+            type: "voice_leave",
+            data: {
+              channel_id: channelId,
+            },
+          }),
+        );
+
+        return null;
+      }
+
+      if (current !== null) {
+        socket.send(
+          JSON.stringify({
+            type: "voice_leave",
+            data: {
+              channel_id: current,
+            },
+          }),
+        );
+      }
+
+      socket.send(
+        JSON.stringify({
+          type: "voice_join",
+          data: {
+            channel_id: channelId,
+          },
+        }),
+      );
+
+      return channelId;
+    });
+  }
+  
+
+  /*
+   * -------------------------
+   * Server
+   * -------------------------
+   */
+
+  function handleSelectServer(serverID: number) {
+  if (serverID === selectedServerId) {
+    return;
+  }
+
+  setActiveVoiceChannelId(null);
+  setVoiceParticipants([]);
+  setSelectedServerId(serverID);
+}
+
+  /*
+   * -------------------------
+   * Channel
+   * -------------------------
+   */
+
+  function handleSelectChannel(
+    channelID: number,
+  ) {
+    setSelectedChannelId(channelID);
+  }
+
+  /*
+   * -------------------------
+   * Join server
+   * -------------------------
+   */
+
+  async function handleJoinServer(
+    code: string,
+  ) {
+    const server = await joinServer(code);
+
+    setServers((currentServers) => {
+      const alreadyExists =
+        currentServers.some(
+          (currentServer) =>
+            currentServer.id === server.id,
+        );
+
+      if (alreadyExists) {
+        return currentServers;
+      }
+
+      return [
+        ...currentServers,
+        server,
+      ];
+    });
+
+    setSelectedServerId(server.id);
+  }
+
+  /*
+   * -------------------------
+   * Invite
+   * -------------------------
+   */
 
   async function handleCreateInvite(
     serverID: number,
@@ -138,54 +540,57 @@ function Chat({ user, onLogout, onUserUpdate }: ChatProps) {
     return createInvite(serverID);
   }
 
-  async function handleCreateServer(name: string) {
+  /*
+   * -------------------------
+   * Create server
+   * -------------------------
+   */
+
+  async function handleCreateServer(
+    name: string,
+  ) {
     const server = await createServer(name);
 
-    setServers((currentServers) => [ ...currentServers, server, ]);
+    setServers((currentServers) => [
+      ...currentServers,
+      server,
+    ]);
 
-    setSelectedServerId(server.id); 
+    setSelectedServerId(server.id);
   }
 
-  function handleJoinVoiceChannel(channelId: number) {
-    setActiveVoiceChannelId((current) => {
-      if (current === channelId) {
-        return null;
-      }
+  /*
+   * -------------------------
+   * Create channel
+   * -------------------------
+   */
 
-      return channelId;
-    });
-  }
-
-  function handleSelectServer(serverID: number) {
-    setSelectedServerId(serverID);
-  }
-
-  function handleSelectChannel(channelID: number) {
-    setSelectedChannelId(channelID);
-  }
-
-  async function handleCreateChannel( name: string, type: "text" | "voice", ) {
-
+  async function handleCreateChannel(
+    name: string,
+    type: "text" | "voice",
+  ) {
     if (selectedServerId === null) {
-      return; 
+      return;
     }
 
-    const channel = await createChannel( 
-      selectedServerId, 
-      name, 
+    const channel = await createChannel(
+      selectedServerId,
+      name,
       type,
     );
 
-    setChannels((currentChannels) => [ 
-      ...currentChannels, channel, 
+    setChannels((currentChannels) => [
+      ...currentChannels,
+      channel,
     ]);
 
-    setSelectedChannelId(channel.id); 
+    setSelectedChannelId(channel.id);
   }
 
   const selectedChannel =
     channels.find(
-      (channel) => channel.id === selectedChannelId,
+      (channel) =>
+        channel.id === selectedChannelId,
     ) ?? null;
 
   return (
@@ -195,64 +600,98 @@ function Chat({ user, onLogout, onUserUpdate }: ChatProps) {
         selectedServerId={selectedServerId}
         onSelectServer={handleSelectServer}
         onLogout={onLogout}
-        onCreateServer={() => setShowCreateServer(true)}
-        onJoinServer={() => setShowJoinServer(true)}
+        onCreateServer={() =>
+          setShowCreateServer(true)
+        }
+        onJoinServer={() =>
+          setShowJoinServer(true)
+        }
       />
 
       <div className="channel-area">
         {selectedServerId !== null && (
           <ChannelSidebar
             channels={channels}
-            selectedChannelId={selectedChannelId}
-            onSelectChannel={handleSelectChannel}
-            onCreateChannel={() => setShowCreateChannel(true)}
-            onInvite={() => setShowInvite(true)}
+            selectedChannelId={
+              selectedChannelId
+            }
+            onSelectChannel={
+              handleSelectChannel
+            }
+            onCreateChannel={() =>
+              setShowCreateChannel(true)
+            }
+            onInvite={() =>
+              setShowInvite(true)
+            }
             serverId={selectedServerId}
-            activeVoiceChannelId={activeVoiceChannelId}
-            onJoinVoiceChannel={handleJoinVoiceChannel}
+            activeVoiceChannelId={
+              activeVoiceChannelId
+            }
+            onJoinVoiceChannel={
+              handleJoinVoiceChannel
+            }
+            voiceParticipants={
+              voiceParticipants
+            }
           />
         )}
 
         <UserPanel
           user={user}
-          onOpenProfile={() => setShowProfile(true)}
+          onOpenProfile={() =>
+            setShowProfile(true)
+          }
           onLogout={onLogout}
         />
       </div>
 
-
       <ChatWindow
         user={user}
         channel={selectedChannel}
+        realtimeEvent={realtimeMessageEvent}
       />
 
-      <MembersSidebar members={members} />
+      <MembersSidebar
+        members={members}
+      />
 
       {showCreateServer && (
         <CreateServerModal
-          onClose={() => setShowCreateServer(false)}
+          onClose={() =>
+            setShowCreateServer(false)
+          }
           onCreate={handleCreateServer}
         />
       )}
 
       {showCreateChannel && (
         <CreateChannelModal
-          onClose={() => setShowCreateChannel(false)}
+          onClose={() =>
+            setShowCreateChannel(false)
+          }
           onCreate={handleCreateChannel}
         />
       )}
 
-      {showInvite && selectedServerId !== null && (
-        <InviteModal
-          serverID={selectedServerId}
-          onClose={() => setShowInvite(false)}
-          onCreateInvite={handleCreateInvite}
-        />
-      )}
+      {showInvite &&
+        selectedServerId !== null && (
+          <InviteModal
+            serverID={selectedServerId}
+            onClose={() =>
+              setShowInvite(false)
+            }
+            onCreateInvite={
+              handleCreateInvite
+            }
+          />
+        )}
 
       {showJoinServer && (
         <JoinServerModal
-          onClose={() => setShowJoinServer(false)}
+          onClose={() =>
+            setShowJoinServer(false)
+          }
           onJoin={handleJoinServer}
         />
       )}
@@ -260,7 +699,9 @@ function Chat({ user, onLogout, onUserUpdate }: ChatProps) {
       {showProfile && (
         <ProfileModal
           user={user}
-          onClose={() => setShowProfile(false)}
+          onClose={() =>
+            setShowProfile(false)
+          }
           onUserUpdate={onUserUpdate}
         />
       )}
@@ -270,8 +711,6 @@ function Chat({ user, onLogout, onUserUpdate }: ChatProps) {
           channelId={activeVoiceChannelId}
         />
       )}
-
-
     </div>
   );
 }
