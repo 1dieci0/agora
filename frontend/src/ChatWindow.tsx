@@ -5,23 +5,26 @@ import { useEffect,
   type ChangeEvent,
 } from "react";
 import {
+  API_URL,
   deleteMessage,
   getMessages,
   sendMessage,
   updateMessage,
 } from "./api";
-import type { Channel, Message, User , RealtimeEvent} from "./types";
+import type { Channel, Message, User , RealtimeEvent, Member} from "./types";
 
 
 type ChatWindowProps = {
   user: User;
   channel: Channel | null;
+  members: Member[];
   realtimeEvent: RealtimeEvent | null;
 };
 
 function ChatWindow({
   user,
   channel,
+  members,
   realtimeEvent,
 }: ChatWindowProps) {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -219,82 +222,98 @@ function ChatWindow({
       <div className="message-list">
         {messages.map((message) => {
 
+          const member = members.find(
+            (member) => member.id === message.user_id,
+          );
+
           const isOwnMessage = message.user_id === user.id;
           const isEditing = editingMessageID === message.id;
 
           return (
             <div className="message" key={message.id}>
-              <div className="message-header">
-                <span className="message-author">
-                  {message.username}
-                </span>
-
-                <span className="message-time">
-                  {new Date(message.created_at).toLocaleTimeString([], {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
-                </span>
-
-                {isOwnMessage && !isEditing && (
-                  <div className="message-actions">
-                    <button
-                      type="button"
-                      onClick={() => startEditing(message)}
-                    >
-                      Edit
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => handleDelete(message.id)}
-                    >
-                      Delete
-                    </button>
-                  </div>
-                )}
-              </div>
-              
-
-              {isEditing ? (
-                <div className="message-edit">
-                  <input
-                    value={editingContent}
-                    onChange={(event) =>
-                      setEditingContent(event.target.value)
-                    }
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") {
-                        handleEdit(message.id);
-                      }
-
-                      if (event.key === "Escape") {
-                        cancelEditing();
-                      }
-                    }}
-                  />
-
-                  <div className="edit-actions">
-                    <button
-                      type="button"
-                      onClick={() => handleEdit(message.id)}
-                    >
-                      Save
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={cancelEditing}
-                    >
-                      Cancel
-                    </button>
-                  </div>
+               <div className="message-avatar">
+                  {member?.avatar_url ? (
+                    <img
+                      src={`${API_URL}${member.avatar_url}`}
+                      alt=""
+                    />
+                  ) : (
+                    message.username.charAt(0).toUpperCase()
+                  )}
                 </div>
-              ) : (
-                <div className="message-content">
-                  {message.content}
+
+                <div className="message-body">
+                  <div className="message-header">
+                    <span className="message-author">
+                      {message.username}
+                    </span>
+
+                    <span className="message-time">
+                      {new Date(message.created_at).toLocaleTimeString([], {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </span>
+
+                    {isOwnMessage && !isEditing && (
+                      <div className="message-actions">
+                        <button
+                          type="button"
+                          onClick={() => startEditing(message)}
+                        >
+                          Edit
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleDelete(message.id)}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {isEditing ? (
+                    <div className="message-edit">
+                      <input
+                        value={editingContent}
+                        onChange={(event) =>
+                          setEditingContent(event.target.value)
+                        }
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") {
+                            handleEdit(message.id);
+                          }
+
+                          if (event.key === "Escape") {
+                            cancelEditing();
+                          }
+                        }}
+                      />
+
+                      <div className="edit-actions">
+                        <button
+                          type="button"
+                          onClick={() => handleEdit(message.id)}
+                        >
+                          Save
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={cancelEditing}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="message-content">
+                      {message.content}
+                    </div>
+                  )}
                 </div>
-              )}
             </div>
           );
         })}

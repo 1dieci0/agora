@@ -619,6 +619,7 @@ function Chat({ user, onLogout, onUserUpdate }: ChatProps) {
       <ChatWindow
         user={user}
         channel={selectedChannel}
+        members={members}
         realtimeEvent={realtimeMessageEvent}
       />
 

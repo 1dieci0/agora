@@ -126,7 +126,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userID, username, passwordHash, err := h.repo.GetByUsername(data.Username)
+	userID, _, passwordHash, err := h.repo.GetByUsername(data.Username)
 	if err == sql.ErrNoRows {
 		http.Error(w, "Invalid username or password", http.StatusUnauthorized)
 		return
@@ -163,12 +163,15 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		Expires:  time.Now().Add(30 * 24 * time.Hour),
 	})
 
+	user, err := h.repo.GetByID(userID)
+	if err != nil {
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
 	response := UserResponse{
 		Message: "Login successful",
-		User: User{
-			ID:       userID,
-			Username: username,
-		},
+		User:    user,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
