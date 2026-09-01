@@ -190,7 +190,7 @@ func (h *Hub) VoiceState(
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 
-	var result []VoiceState
+	result := make([]VoiceState, 0)
 
 	channels := h.voice[serverID]
 

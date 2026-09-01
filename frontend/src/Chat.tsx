@@ -56,8 +56,7 @@ function Chat({ user, onLogout, onUserUpdate }: ChatProps) {
   const [realtimeMessageEvent, setRealtimeMessageEvent] =
     useState<RealtimeEvent | null>(null);
 
-  const [voiceParticipants, setVoiceParticipants] =
-    useState<VoiceParticipant[]>([]);
+
 
   const [selectedServerId, setSelectedServerId] =
     useState<number | null>(null);
@@ -68,10 +67,13 @@ function Chat({ user, onLogout, onUserUpdate }: ChatProps) {
   const [activeVoiceChannelId, setActiveVoiceChannelId] =
     useState<number | null>(null);
 
+  const [voiceStates, setVoiceStates] = useState<VoiceState[]>([]);
+
   /*
    * The realtime WebSocket for the currently selected server.
    */
   const realtimeSocketRef = useRef<WebSocket | null>(null);
+
 
   /*
    * -------------------------
@@ -216,17 +218,43 @@ function Chat({ user, onLogout, onUserUpdate }: ChatProps) {
 
         switch (message.type) {
           case "voice_state": {
-            updateVoiceParticipants(message.data);
+            setVoiceStates(
+              Array.isArray(message.data)
+                ? message.data
+                : [],
+            );
+
             break;
           }
 
           case "voice_join": {
-            updateVoiceParticipants(message.data);
+            setVoiceStates((current) => {
+              const withoutUser = current.filter(
+                (state) =>
+                  state.user_id !== message.data.user_id,
+              );
+
+              return [
+                ...withoutUser,
+                message.data,
+              ];
+            });
+
             break;
           }
 
           case "voice_leave": {
-            removeVoiceParticipant(message.data);
+            setVoiceStates((current) =>
+              current.filter(
+                (state) =>
+                  !(
+                    state.user_id === message.data.user_id &&
+                    state.channel_id ===
+                      message.data.channel_id
+                  ),
+              ),
+            );
+
             break;
           }
 
@@ -236,9 +264,6 @@ function Chat({ user, onLogout, onUserUpdate }: ChatProps) {
             setRealtimeMessageEvent(message);
             break;
           }
-
-          default:
-            break;
         }
       } catch (error) {
         console.error(
@@ -284,132 +309,6 @@ function Chat({ user, onLogout, onUserUpdate }: ChatProps) {
 
 
   
-
-  
-  function createVoiceParticipant(
-    state: VoiceState,
-  ): VoiceParticipant | null {
-    const member = members.find(
-      (member) => member.id === state.user_id,
-    );
-
-    if (!member) {
-      return null;
-    }
-
-    return {
-      id: member.id,
-      channelId: state.channel_id,
-      username: member.username,
-      avatar_url: member.avatar_url,
-      muted: false,
-      speaking: false,
-    };
-  }
-
-  /*
-   * Rebuild the visible participant list from the
-   * realtime voice state.
-   *
-   * IMPORTANT:
-   *
-   * We only show participants for the voice channel
-   * the current user is actually viewing/joined to.
-   *
-   * The server still knows about everybody.
-   */
-  function updateVoiceParticipants(
-    state: VoiceState | VoiceState[],
-  ) {
-    const states = Array.isArray(state)
-      ? state
-      : [state];
-
-    if (activeVoiceChannelId === null) {
-      setVoiceParticipants([]);
-      return;
-    }
-
-    const participants: VoiceParticipant[] = [];
-
-    for (const voiceState of states) {
-      if (
-        voiceState.channel_id !==
-        activeVoiceChannelId
-      ) {
-        continue;
-      }
-
-      const participant =
-        createVoiceParticipant(voiceState);
-
-      if (!participant) {
-        continue;
-      }
-
-      if (
-        participants.some(
-          (existing) =>
-            existing.id === participant.id,
-        )
-      ) {
-        continue;
-      }
-
-      participants.push(participant);
-    }
-
-    setVoiceParticipants(participants);
-  }
-
-  /*
-   * Remove one participant from the local UI.
-   */
-  function removeVoiceParticipant(
-    state: VoiceState,
-  ) {
-    if (
-      state.channel_id !==
-      activeVoiceChannelId
-    ) {
-      return;
-    }
-
-    setVoiceParticipants((current) =>
-      current.filter(
-        (participant) =>
-          participant.id !== state.user_id,
-      ),
-    );
-  }
-
-  /*
-   * Send an event through the server realtime socket.
-   */
-  function sendRealtimeEvent(
-    event: object,
-  ) {
-    const socket =
-      realtimeSocketRef.current;
-
-    if (!socket) {
-      console.warn(
-        "Realtime socket is not connected",
-      );
-      return;
-    }
-
-    if (
-      socket.readyState !== WebSocket.OPEN
-    ) {
-      console.warn(
-        "Realtime socket is not open",
-      );
-      return;
-    }
-
-    socket.send(JSON.stringify(event));
-  }
 
   /*
    * -------------------------
@@ -476,14 +375,14 @@ function Chat({ user, onLogout, onUserUpdate }: ChatProps) {
    */
 
   function handleSelectServer(serverID: number) {
-  if (serverID === selectedServerId) {
-    return;
-  }
+    if (serverID === selectedServerId) {
+      return;
+    }
 
-  setActiveVoiceChannelId(null);
-  setVoiceParticipants([]);
-  setSelectedServerId(serverID);
-}
+    setActiveVoiceChannelId(null);
+    setVoiceStates([]);
+    setSelectedServerId(serverID);
+  }
 
   /*
    * -------------------------
@@ -592,6 +491,39 @@ function Chat({ user, onLogout, onUserUpdate }: ChatProps) {
       (channel) =>
         channel.id === selectedChannelId,
     ) ?? null;
+
+  const voiceParticipants: VoiceParticipant[] =
+    (voiceStates ?? [])
+      .map((state) => {
+        const member = members.find(
+          (member) =>
+            member.id === state.user_id,
+        );
+
+        if (!member) {
+          return null;
+        }
+
+        return {
+          id: member.id,
+          channelId: state.channel_id,
+          username: member.username,
+
+          // Use the avatar URL if your Member type has it.
+          avatar_url:
+            member.avatar_url ?? null,
+
+          muted: false,
+          speaking: false,
+        };
+      })
+      .filter(
+        (
+          participant,
+        ): participant is VoiceParticipant =>
+          participant !== null,
+      );
+
 
   return (
     <div className="app">

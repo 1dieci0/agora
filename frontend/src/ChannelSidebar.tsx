@@ -98,7 +98,10 @@ function ChannelSidebar({
                 onJoin={onJoinVoiceChannel}
               />
 
-              {channel.id === activeVoiceChannelId && (
+              {voiceParticipants.some(
+                (participant) =>
+                  participant.channelId === channel.id,
+              ) && (
                 <div className="voice-participant-list">
                   {voiceParticipants
                   .filter(
