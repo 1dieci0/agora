@@ -3,16 +3,28 @@ package users
 import (
 	"database/sql"
 	"encoding/json"
+	"log"
 	"net/http"
 	"time"
 )
 
-type Handler struct {
-	repo *Repository
+type ServerBroadcaster interface {
+	BroadcastServer(serverID int, data []byte)
 }
 
-func NewHandler(repo *Repository) *Handler {
-	return &Handler{repo: repo}
+type Handler struct {
+	repo *Repository
+	hub  ServerBroadcaster
+}
+
+func NewHandler(
+	repo *Repository,
+	hub ServerBroadcaster,
+) *Handler {
+	return &Handler{
+		repo: repo,
+		hub:  hub,
+	}
 }
 
 func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
@@ -68,18 +80,18 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 	userID := int(id)
 
 	sessionID, err := createSession(h.repo.db, userID)
-	if err != nil{
+	if err != nil {
 		http.Error(w, "Could not create session", http.StatusInternalServerError)
 	}
 
-	http.SetCookie(w, &http.Cookie{ 
-		Name: "session", 
-		Value: sessionID, 
-		Path: "/", 
+	http.SetCookie(w, &http.Cookie{
+		Name:     "session",
+		Value:    sessionID,
+		Path:     "/",
 		HttpOnly: true,
-		Secure: false,
+		Secure:   false,
 		SameSite: http.SameSiteLaxMode,
-		Expires: time.Now().Add(30 * 24 * time.Hour),
+		Expires:  time.Now().Add(30 * 24 * time.Hour),
 	})
 
 	user := User{
@@ -251,8 +263,9 @@ func (h *Handler) GetMe(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-
 func (h *Handler) UploadAvatar(w http.ResponseWriter, r *http.Request) {
+	log.Println("UploadAvatar called")
+
 	if r.Method != http.MethodPut {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -282,12 +295,14 @@ func (h *Handler) UploadAvatar(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	file, _, err := r.FormFile("avatar")
+	file, fileHeader, err := r.FormFile("avatar")
 	if err != nil {
 		http.Error(w, "Avatar is required", http.StatusBadRequest)
 		return
 	}
 	defer file.Close()
+
+	log.Println("uploading file: ", fileHeader.Filename)
 
 	contentType, header, err := detectImageType(file)
 	if err != nil {
@@ -327,6 +342,29 @@ func (h *Handler) UploadAvatar(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, "Could not get user", http.StatusInternalServerError)
 		return
+	}
+
+	eventData, err := json.Marshal(struct {
+		Type string `json:"type"`
+		Data User   `json:"data"`
+	}{
+		Type: "user_updated",
+		Data: user,
+	})
+
+	if err != nil {
+		http.Error(w, "Could not create realtime event", http.StatusInternalServerError)
+		return
+	}
+
+	serverIDs, err := h.repo.GetServerIDsForUser(userID)
+	if err != nil {
+		http.Error(w, "Could not get user servers", http.StatusInternalServerError)
+		return
+	}
+
+	for _, serverID := range serverIDs {
+		h.hub.BroadcastServer(serverID, eventData)
 	}
 
 	response := UserResponse{

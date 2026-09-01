@@ -257,6 +257,27 @@ function Chat({ user, onLogout, onUserUpdate }: ChatProps) {
 
             break;
           }
+          case "user_updated": {
+            const updatedUser = message.data;
+
+            setMembers((currentMembers) =>
+              currentMembers.map((member) =>
+                member.id === updatedUser.id
+                  ? {
+                      ...member,
+                      username: updatedUser.username,
+                      avatar_url: updatedUser.avatar_url,
+                    }
+                  : member,
+              ),
+            );
+
+            if (updatedUser.id === user.id) {
+              onUserUpdate(updatedUser);
+            }
+
+            break;
+          }
 
           case "message_created":
           case "message_updated":
@@ -309,6 +330,23 @@ function Chat({ user, onLogout, onUserUpdate }: ChatProps) {
 
 
   
+  function handleUserUpdate(updatedUser: User) {
+    // Update the user in App.tsx
+    onUserUpdate(updatedUser);
+
+    // Update this server's member list immediately
+    setMembers((currentMembers) =>
+      currentMembers.map((member) =>
+        member.id === updatedUser.id
+          ? {
+              ...member,
+              avatar_url: updatedUser.avatar_url,
+            }
+          : member,
+      ),
+    );
+  }
+
 
   /*
    * -------------------------
@@ -634,7 +672,7 @@ function Chat({ user, onLogout, onUserUpdate }: ChatProps) {
           onClose={() =>
             setShowProfile(false)
           }
-          onUserUpdate={onUserUpdate}
+          onUserUpdate={handleUserUpdate}
         />
       )}
 

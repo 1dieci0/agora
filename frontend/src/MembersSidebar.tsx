@@ -1,4 +1,5 @@
 
+import { API_URL } from "./api";
 import type { Member } from "./types";
 
 type MembersSidebarProps = {
@@ -32,9 +33,14 @@ function MembersSidebar({
               key={member.id}
             >
               <span className="member-avatar">
-                {member.username
-                  .charAt(0)
-                  .toUpperCase()}
+                {member.avatar_url ? (
+                  <img
+                    src={`${API_URL}${member.avatar_url}`}
+                    alt=""
+                  />
+                ) : (
+                  member.username.charAt(0).toUpperCase()
+                )}
               </span>
 
               <span className="member-name">
@@ -54,11 +60,16 @@ function MembersSidebar({
               className="member"
               key={member.id}
             >
-              <span className="member-avatar">
-                {member.username
-                  .charAt(0)
-                  .toUpperCase()}
-              </span>
+            <span className="member-avatar">
+              {member.avatar_url ? (
+                <img
+                  src={`${API_URL}${member.avatar_url}`}
+                  alt=""
+                />
+              ) : (
+                member.username.charAt(0).toUpperCase()
+              )}
+            </span>
 
               <span className="member-name">
                 {member.username}
@@ -78,9 +89,14 @@ function MembersSidebar({
               key={member.id}
             >
               <span className="member-avatar">
-                {member.username
-                  .charAt(0)
-                  .toUpperCase()}
+                {member.avatar_url ? (
+                  <img
+                    src={`${API_URL}${member.avatar_url}`}
+                    alt=""
+                  />
+                ) : (
+                  member.username.charAt(0).toUpperCase()
+                )}
               </span>
 
               <span className="member-name">

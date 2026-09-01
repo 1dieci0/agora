@@ -20,9 +20,10 @@ type ServersResponse struct {
 }
 
 type Member struct {
-	ID       int    `json:"id"`
-	Username string `json:"username"`
-	Role     Role   `json:"role"`
+	ID        int     `json:"id"`
+	Username  string  `json:"username"`
+	AvatarURL *string `json:"avatar_url"`
+	Role      Role    `json:"role"`
 }
 
 type MembersResponse struct {

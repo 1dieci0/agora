@@ -77,4 +77,8 @@ export type RealtimeEvent =
         id: number;
         channel_id: number;
       };
+    }
+  | {
+      type: "user_updated";
+      data: User;
     };

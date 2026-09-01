@@ -146,11 +146,13 @@ func (r *Repository) GetMembers(serverID int) ([]Member, error) {
 		`SELECT 
 			u.id,
 			u.username,
+			u.avatar_url,
 			sm.role 
 		FROM users u 
 		JOIN server_members sm 
 			ON sm.user_id = u.id 
-		WHERE sm.server_id = ? ORDER BY u.username`,
+		WHERE sm.server_id = ?
+		ORDER BY u.username`,
 		serverID,
 	)
 	if err != nil {
@@ -161,11 +163,12 @@ func (r *Repository) GetMembers(serverID int) ([]Member, error) {
 	members := make([]Member, 0)
 
 	for rows.Next() {
-
 		var member Member
+
 		if err := rows.Scan(
 			&member.ID,
 			&member.Username,
+			&member.AvatarURL,
 			&member.Role,
 		); err != nil {
 			return nil, err
@@ -173,6 +176,7 @@ func (r *Repository) GetMembers(serverID int) ([]Member, error) {
 
 		members = append(members, member)
 	}
+
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}

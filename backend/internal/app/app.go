@@ -52,7 +52,7 @@ func NewApp() (*App, error) {
 		db:     db,
 		router: http.NewServeMux(),
 
-		users: users.NewHandler(usersRepo),
+		users: users.NewHandler(usersRepo, hub),
 
 		servers: servers.NewHandler(serverRepo),
 

@@ -98,7 +98,6 @@ func (r *Repository) GetUserIDFromSession(sessionID string) (int, error) {
 	return userID, err
 }
 
-
 func (r *Repository) UpdateAvatar(userID int, avatarURL string) error {
 	_, err := r.db.Exec(
 		`UPDATE users
@@ -110,8 +109,6 @@ func (r *Repository) UpdateAvatar(userID int, avatarURL string) error {
 
 	return err
 }
-
-
 
 func (r *Repository) GetAvatarURL(userID int) (string, error) {
 	var avatarURL sql.NullString
@@ -132,4 +129,34 @@ func (r *Repository) GetAvatarURL(userID int) (string, error) {
 	}
 
 	return avatarURL.String, nil
+}
+
+func (r *Repository) GetServerIDsForUser(userID int) ([]int, error) {
+	rows, err := r.db.Query(`
+		SELECT server_id
+		FROM server_members
+		WHERE user_id = ?
+	`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var serverIDs []int
+
+	for rows.Next() {
+		var serverID int
+
+		if err := rows.Scan(&serverID); err != nil {
+			return nil, err
+		}
+
+		serverIDs = append(serverIDs, serverID)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return serverIDs, nil
 }

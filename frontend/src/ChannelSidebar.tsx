@@ -1,3 +1,4 @@
+import { API_URL } from "./api";
 import type { Channel, VoiceParticipant} from "./types";
 import VoiceChannel from "./VoiceChannel";
 
@@ -118,9 +119,16 @@ function ChannelSidebar({
                       }
                     >
                       <div className="voice-participant-avatar">
-                        {participant.username
-                          .charAt(0)
-                          .toUpperCase()}
+                        {participant.avatar_url ? (
+                          <img
+                            src={`${API_URL}${participant.avatar_url}`}
+                            alt=""
+                          />
+                        ) : (
+                          participant.username
+                            .charAt(0)
+                            .toUpperCase()
+                        )}
                       </div>
 
                       <span className="voice-participant-name">
