@@ -1,4 +1,4 @@
-import { API_URL } from "./api";
+import { API_URL, type ChannelUnread } from "./api";
 import type { Channel, VoiceParticipant} from "./types";
 import VoiceChannel from "./VoiceChannel";
 
@@ -19,6 +19,7 @@ type ChannelSidebarProps = {
   activeVoiceChannelId: number | null;
   onJoinVoiceChannel: (channelId: number) => void;
   voiceParticipants: VoiceParticipant[];
+  unreadChannels: Record<number, ChannelUnread>;
 };
 
 function ChannelSidebar({
@@ -31,6 +32,7 @@ function ChannelSidebar({
   activeVoiceChannelId,
   onJoinVoiceChannel,
   voiceParticipants,
+  unreadChannels,
 }: ChannelSidebarProps) {
   const textChannels = channels.filter(
     (channel) => channel.type === "text",
@@ -85,7 +87,15 @@ function ChannelSidebar({
                 #
               </span>
 
-              {channel.name}
+              <span className="channel-name">
+                {channel.name}
+              </span>
+
+              {unreadChannels[channel.id] && (
+                <span className="channel-unread">
+                  {unreadChannels[channel.id].unread_count}
+                </span>
+              )}
             </button>
           ))}
         </div>

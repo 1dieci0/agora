@@ -57,7 +57,10 @@ func (r *Repository) GetByUsername(username string) (
 }
 
 func (r *Repository) GetByID(id int) (User, error) {
-	var user User
+	var (
+		user      User
+		avatarURL sql.NullString
+	)
 
 	err := r.db.QueryRow(
 		`SELECT
@@ -70,10 +73,18 @@ func (r *Repository) GetByID(id int) (User, error) {
 	).Scan(
 		&user.ID,
 		&user.Username,
-		&user.AvatarURL,
+		&avatarURL,
 	)
 
-	return user, err
+	if err != nil {
+		return user, err
+	}
+
+	if avatarURL.Valid {
+		user.AvatarURL = avatarURL.String
+	}
+
+	return user, nil
 }
 
 func (r *Repository) CreateSession(userID int) (string, error) {

@@ -13,3 +13,10 @@ type ClientEvent struct {
 		Deafened  bool `json:"deafened"`
 	} `json:"data"`
 }
+
+type UnreadUpdate struct {
+	ServerID  int `json:"server_id"`
+	ChannelID int `json:"channel_id"`
+	MessageID int `json:"message_id"`
+	UserID    int `json:"user_id"`
+}

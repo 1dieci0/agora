@@ -53,6 +53,13 @@ export type VoiceState = {
   deafened: boolean;
 };
 
+type UnreadUpdate = {
+  server_id: number;
+  channel_id: number;
+  message_id: number;
+  user_id: number;
+};
+
 export type RealtimeEvent =
   | {
       type: "voice_state";
@@ -74,6 +81,10 @@ export type RealtimeEvent =
   | {
       type: "message_updated";
       data: Message;
+    }
+  | {
+      type: "unread_update";
+      data: UnreadUpdate;
     }
   | {
       type: "message_deleted";

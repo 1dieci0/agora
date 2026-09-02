@@ -7,6 +7,7 @@ type ServerSidebarProps = {
   onLogout: () => void;
   onCreateServer: () => void;
   onJoinServer: () => void;
+  unreadServerIds: Set<number>;
 };
 
 
@@ -17,6 +18,7 @@ function ServerSidebar({
   onLogout,
   onCreateServer,
   onJoinServer,
+  unreadServerIds,
 }: ServerSidebarProps) {
   return (
     <aside className="server-sidebar">
@@ -32,6 +34,10 @@ function ServerSidebar({
             onClick={() => onSelectServer(server.id)}
           >
             {server.name.charAt(0).toUpperCase()}
+
+            {unreadServerIds.has(server.id) && (
+              <span className="server-unread" />
+            )}
           </button>
         ))}
       </div>

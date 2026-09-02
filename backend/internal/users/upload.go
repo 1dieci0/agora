@@ -4,7 +4,6 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"io"
-	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -32,7 +31,6 @@ func saveAvatar(
 	randomBytes := make([]byte, 16)
 
 	if _, err := rand.Read(randomBytes); err != nil {
-		log.Printf("1 %s", err)
 		return "", err
 	}
 
@@ -41,30 +39,24 @@ func saveAvatar(
 	avatarDir := "uploads/avatars"
 
 	if err := os.MkdirAll(avatarDir, 0755); err != nil {
-		log.Printf("2 %s", err)
 		return "", err
 	}
 
 	filePath := filepath.Join(avatarDir, filename)
 
-	log.Println("saving avatar to :", filePath)
-
 	output, err := os.Create(filePath)
 	if err != nil {
-		log.Printf("3 %s", err)
 		return "", err
 	}
 
 	defer output.Close()
 
 	if _, err := output.Write(header); err != nil {
-		log.Printf("5 %s", err)
 		os.Remove(filePath)
 		return "", err
 	}
 
 	if _, err := io.Copy(output, file); err != nil {
-		log.Printf("6 %s", err)
 		os.Remove(filePath)
 		return "", err
 	}

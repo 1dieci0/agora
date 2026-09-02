@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import {
   getChannels,
   getServers,
@@ -8,6 +8,9 @@ import {
   joinServer,
   getMembers,
   API_URL,
+  getUnread,
+  markChannelRead,
+  type ChannelUnread,
 } from "./api";
 
 import type {
@@ -72,10 +75,126 @@ function Chat({ user, onLogout, onUserUpdate }: ChatProps) {
 
   const [voiceStates, setVoiceStates] = useState<VoiceState[]>([]);
 
+  const [unreadChannels, setUnreadChannels] =
+    useState<Record<number, ChannelUnread>>({});  
+
   /*
    * The realtime WebSocket for the currently selected server.
    */
   const realtimeSocketRef = useRef<WebSocket | null>(null);
+  const userRealtimeSocketRef = useRef<WebSocket | null>(null);
+
+
+  useEffect(() => {
+    const WS_URL = API_URL.replace(/^http/, "ws");
+
+    const socket = new WebSocket(
+      `${WS_URL}/ws/realtime`
+    );
+
+    userRealtimeSocketRef.current = socket;
+
+    socket.onopen = () => {
+      console.log(
+        "User realtime connected"
+      );
+    };
+
+    socket.onmessage = (event) => {
+      try {
+        const message: RealtimeEvent =
+          JSON.parse(event.data);
+
+        console.log(
+          "user realtime event:",
+          message
+        );
+
+        if (message.type !== "unread_update") {
+          return;
+        }
+
+        const update = message.data;
+
+        if (update.user_id === user.id) {
+          return;
+        }
+
+        setUnreadChannels((current) => ({
+          ...current,
+          [update.channel_id]: {
+            channel_id: update.channel_id,
+            server_id: update.server_id,
+            unread_count:
+              (current[update.channel_id]
+                ?.unread_count ?? 0) + 1,
+            last_message_id:
+              update.message_id,
+            last_read_message_id:
+              current[update.channel_id]
+                ?.last_read_message_id ?? 0,
+          },
+        }));
+      } catch (error) {
+        console.error(
+          "Could not process user realtime event:",
+          error,
+        );
+      }
+    };
+
+    socket.onerror = (error) => {
+      console.error(
+        "User realtime error:",
+        error,
+      );
+    };
+
+    socket.onclose = () => {
+      console.log(
+        "User realtime disconnected"
+      );
+
+      if (
+        userRealtimeSocketRef.current === socket
+      ) {
+        userRealtimeSocketRef.current = null;
+      }
+    };
+
+    return () => {
+      socket.close();
+
+      if (
+        userRealtimeSocketRef.current === socket
+      ) {
+        userRealtimeSocketRef.current = null;
+      }
+    };
+  }, [user.id]);
+
+  useEffect(() => {
+    async function loadUnread() {
+      try {
+        const response = await getUnread();
+
+        const unread: Record<number, ChannelUnread> = {};
+
+        for (const channel of response.channels) {
+          unread[channel.channel_id] = channel;
+        }
+
+        setUnreadChannels(unread);
+      } catch (error) {
+        console.error(
+          "Could not load unread messages:",
+          error,
+        );
+      }
+    }
+
+    loadUnread();
+  }, []);
 
 
   /*
@@ -183,6 +302,24 @@ function Chat({ user, onLogout, onUserUpdate }: ChatProps) {
    * - audio
    * - tracks
    */
+  const refreshUnread = useCallback(async () => {
+    try {
+      const response = await getUnread();
+
+      const unread: Record<number, ChannelUnread> = {};
+
+      for (const channel of response.channels) {
+        unread[channel.channel_id] = channel;
+      }
+
+      setUnreadChannels(unread);
+    } catch (error) {
+      console.error(
+        "Could not refresh unread messages:",
+        error,
+      );
+    }
+  }, []);
 
   useEffect(() => {
     if (selectedServerId === null) {
@@ -215,6 +352,8 @@ function Chat({ user, onLogout, onUserUpdate }: ChatProps) {
     };
 
     socket.onmessage = (event) => {
+      console.log("realtime raw event:" , event.data)
+
       try {
         const message: RealtimeEvent =
           JSON.parse(event.data);
@@ -294,7 +433,28 @@ function Chat({ user, onLogout, onUserUpdate }: ChatProps) {
             break;
           }
 
-          case "message_created":
+          case "message_created": {
+            setRealtimeMessageEvent(message);
+
+            const newMessage = message.data;
+
+            if (newMessage.user_id === user.id) {
+              break;
+            }
+
+            if (newMessage.channel_id === selectedChannelId) {
+              break;
+            }
+
+            refreshUnread();
+
+            break;
+          }
+
+          case "message_deleted": {
+            setRealtimeMessageEvent(message);
+            break;
+          }
           case "message_updated":
           case "message_deleted": {
             setRealtimeMessageEvent(message);
@@ -341,9 +501,29 @@ function Chat({ user, onLogout, onUserUpdate }: ChatProps) {
         realtimeSocketRef.current = null;
       }
     };
-  }, [selectedServerId]);
+  }, [selectedServerId, selectedChannelId, refreshUnread]);
 
+  const handleLatestMessage = useCallback(
+    async (channelID: number, messageID: number) => {
+      try {
+        await markChannelRead(channelID, messageID);
 
+        setUnreadChannels((current) => {
+          const next = { ...current };
+
+          delete next[channelID];
+
+          return next;
+        });
+      } catch (error) {
+        console.error(
+          "Could not mark channel as read:",
+          error,
+        );
+      }
+    },
+    [],
+  );
   
   function handleUserUpdate(updatedUser: User) {
     // Update the user in App.tsx
@@ -371,6 +551,7 @@ function Chat({ user, onLogout, onUserUpdate }: ChatProps) {
 
   function handleJoinVoiceChannel(channelId: number) {
     const socket = realtimeSocketRef.current;
+    
 
     if (
       !socket ||
@@ -658,6 +839,12 @@ function Chat({ user, onLogout, onUserUpdate }: ChatProps) {
     );
   }
 
+  const unreadServerIds = new Set(
+    Object.values(unreadChannels).map(
+      (channel) => channel.server_id,
+    ),
+  );
+
   return (
     <div className="app">
       <ServerSidebar
@@ -671,6 +858,7 @@ function Chat({ user, onLogout, onUserUpdate }: ChatProps) {
         onJoinServer={() =>
           setShowJoinServer(true)
         }
+        unreadServerIds={unreadServerIds}
       />
 
       <div className="channel-area">
@@ -699,6 +887,7 @@ function Chat({ user, onLogout, onUserUpdate }: ChatProps) {
             voiceParticipants={
               voiceParticipants
             }
+            unreadChannels={unreadChannels}
           />
         )}
 
@@ -720,6 +909,7 @@ function Chat({ user, onLogout, onUserUpdate }: ChatProps) {
         channel={selectedChannel}
         members={members}
         realtimeEvent={realtimeMessageEvent}
+        onLatestMessage={handleLatestMessage}
       />
 
       <MembersSidebar

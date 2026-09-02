@@ -82,9 +82,7 @@ func (h *Hub) BroadcastServer(
 	for client := range clients {
 		select {
 		case client.send <- data:
-
 		default:
-			// Remove the client while the lock is already held.
 			h.removeLocked(client)
 		}
 	}

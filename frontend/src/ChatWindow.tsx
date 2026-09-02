@@ -19,6 +19,7 @@ type ChatWindowProps = {
   channel: Channel | null;
   members: Member[];
   realtimeEvent: RealtimeEvent | null;
+  onLatestMessage: (channelID: number, messageID: number) => void;
 };
 
 function ChatWindow({
@@ -26,6 +27,7 @@ function ChatWindow({
   channel,
   members,
   realtimeEvent,
+  onLatestMessage,
 }: ChatWindowProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [content, setContent] = useState("");
@@ -57,6 +59,8 @@ function ChatWindow({
 
           return [...current, message];
         });
+
+        onLatestMessage(channel.id, message.id);
 
         break;
       }
@@ -102,7 +106,16 @@ function ChatWindow({
       try {
         const messages = await getMessages(channelID);
 
-        setMessages([...messages].reverse());
+        const orderedMessages = [...messages].reverse();
+
+        setMessages(orderedMessages);
+
+        if (orderedMessages.length > 0) {
+          const latestMessage =
+            orderedMessages[orderedMessages.length - 1];
+
+          onLatestMessage(channelID, latestMessage.id);
+        }
       } catch (error) {
         console.error(error);
         setMessages([]);

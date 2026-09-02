@@ -3,7 +3,6 @@ package users
 import (
 	"database/sql"
 	"encoding/json"
-	"log"
 	"net/http"
 	"time"
 )
@@ -82,6 +81,7 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 	sessionID, err := createSession(h.repo.db, userID)
 	if err != nil {
 		http.Error(w, "Could not create session", http.StatusInternalServerError)
+		return
 	}
 
 	http.SetCookie(w, &http.Cookie{
@@ -267,7 +267,6 @@ func (h *Handler) GetMe(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) UploadAvatar(w http.ResponseWriter, r *http.Request) {
-	log.Println("UploadAvatar called")
 
 	if r.Method != http.MethodPut {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -298,14 +297,12 @@ func (h *Handler) UploadAvatar(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	file, fileHeader, err := r.FormFile("avatar")
+	file, _, err := r.FormFile("avatar")
 	if err != nil {
 		http.Error(w, "Avatar is required", http.StatusBadRequest)
 		return
 	}
 	defer file.Close()
-
-	log.Println("uploading file: ", fileHeader.Filename)
 
 	contentType, header, err := detectImageType(file)
 	if err != nil {

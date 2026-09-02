@@ -7,6 +7,18 @@ type LoginResponse = {
   user: User;
 };
 
+export type ChannelUnread = {
+  server_id: number;
+  channel_id: number;
+  unread_count: number;
+  last_message_id: number;
+  last_read_message_id: number;
+};
+
+export type UnreadResponse = {
+  channels: ChannelUnread[];
+};
+
 export async function login(username: string, password: string): Promise<LoginResponse> {
   const response = await fetch(`${API_URL}/api/login`, {
     method: "POST",
@@ -364,4 +376,51 @@ export async function getVoiceToken(
   }
 
   return data.token;
+}
+
+
+
+export async function getUnread(): Promise<UnreadResponse> {
+  const response = await fetch(`${API_URL}/api/unread`, {
+    credentials: "include",
+  });
+
+  if (!response.ok) {
+    throw new Error("Could not load unread messages");
+  }
+
+  return response.json();
+}
+
+export async function markChannelRead(
+  channelID: number,
+  messageID: number,
+): Promise<void> {
+  const response = await fetch(
+    `${API_URL}/api/channels/${channelID}/read`,
+    {
+      method: "PUT",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        message_id: messageID,
+      }),
+    },
+  );
+
+  if (!response.ok) {
+    const body = await response.text();
+
+    console.error(
+      "markChannelRead failed:",
+      response.status,
+      body,
+    );
+
+    throw new Error(
+      `Could not mark channel as read (${response.status})`,
+    );
+  }
 }

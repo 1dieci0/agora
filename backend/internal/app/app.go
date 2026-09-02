@@ -9,6 +9,7 @@ import (
 	"agora/internal/messages"
 	"agora/internal/realtime"
 	"agora/internal/servers"
+	"agora/internal/unread"
 	"agora/internal/users"
 	"agora/internal/voice"
 )
@@ -21,11 +22,16 @@ type App struct {
 	channels *channels.Handler
 	messages *messages.Handler
 
-	textHub  *realtime.Hub
-	realtime *realtime.Handler
+	textHub *realtime.Hub
+	userHub *realtime.UserHub
+
+	realtime     *realtime.Handler
+	userRealtime *realtime.UserHandler
 
 	voiceHub *voice.Hub
 	voice    *voice.Handler
+
+	unread *unread.Handler
 }
 
 func NewApp() (*App, error) {
@@ -41,12 +47,14 @@ func NewApp() (*App, error) {
 
 	//realtime
 	hub := realtime.NewHub()
+	userHub := realtime.NewUserHub()
 	voiceHub := voice.NewHub()
 	// Repositories
 	serverRepo := servers.NewRepository(db)
 	channelRepo := channels.NewRepository(db)
 	messageRepo := messages.NewRepository(db)
 	usersRepo := users.NewRepository(db)
+	unreadRepo := unread.NewRepository(db)
 
 	app := &App{
 		db:     db,
@@ -66,14 +74,23 @@ func NewApp() (*App, error) {
 			channelRepo,
 			serverRepo,
 			hub,
+			userHub,
 		),
 
 		textHub: hub,
+		userHub: userHub,
 
-		realtime: realtime.NewHandler(channelRepo, serverRepo, hub),
+		realtime:     realtime.NewHandler(channelRepo, serverRepo, hub),
+		userRealtime: realtime.NewUserHandler(userHub),
 
 		voiceHub: voiceHub,
 		voice:    voice.NewHandler(voiceHub, channelRepo, serverRepo),
+
+		unread: unread.NewHandler(
+			unreadRepo,
+			channelRepo,
+			serverRepo,
+		),
 	}
 
 	app.RegisterRoutes()
@@ -214,6 +231,11 @@ func (app *App) RegisterRoutes() {
 		app.users.RequireAuth(app.realtime.Connect),
 	)
 
+	app.router.HandleFunc(
+		"GET /ws/realtime",
+		app.users.RequireAuth(app.userRealtime.Connect),
+	)
+
 	//uploads
 
 	app.router.Handle(
@@ -226,14 +248,19 @@ func (app *App) RegisterRoutes() {
 
 	//voice
 
-	// app.router.HandleFunc(
-	// 	"GET /api/channels/{channelID}/voice",
-	// 	app.users.RequireAuth(app.voice.Join),
-	// )
-
 	app.router.HandleFunc(
 		"POST /api/voice/token",
 		app.users.RequireAuth(app.voice.CreateToken),
 	)
 
+	//unread
+	app.router.HandleFunc(
+		"GET /api/unread",
+		app.users.RequireAuth(app.unread.GetUnread),
+	)
+
+	app.router.HandleFunc(
+		"PUT /api/channels/{channelID}/read",
+		app.users.RequireAuth(app.unread.MarkChannelRead),
+	)
 }

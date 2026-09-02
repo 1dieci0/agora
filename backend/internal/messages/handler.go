@@ -18,6 +18,7 @@ type Handler struct {
 	channelRepo *channels.Repository
 	serverRepo  *servers.Repository
 	hub         *realtime.Hub
+	userHub     *realtime.UserHub
 }
 
 func NewHandler(
@@ -25,12 +26,14 @@ func NewHandler(
 	channelRepo *channels.Repository,
 	serverRepo *servers.Repository,
 	hub *realtime.Hub,
+	userHub *realtime.UserHub,
 ) *Handler {
 	return &Handler{
 		repo:        repo,
 		channelRepo: channelRepo,
 		serverRepo:  serverRepo,
 		hub:         hub,
+		userHub:     userHub,
 	}
 }
 
@@ -123,6 +126,44 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.hub.BroadcastServer(serverID, eventData)
+
+	members, err := h.serverRepo.GetMembers(serverID)
+	if err != nil {
+		http.Error(
+			w,
+			"Internal server error",
+			http.StatusInternalServerError,
+		)
+		return
+	}
+
+	unreadEvent := realtime.Event{
+		Type: "unread_update",
+		Data: realtime.UnreadUpdate{
+			ServerID:  serverID,
+			ChannelID: channelID,
+			MessageID: int(message.ID),
+			UserID:    userID,
+		},
+	}
+
+	unreadData, err := json.Marshal(unreadEvent)
+	if err != nil {
+		http.Error(
+			w,
+			"Internal server error",
+			http.StatusInternalServerError,
+		)
+		return
+	}
+
+	for _, member := range members {
+		if member.ID == userID {
+			continue
+		}
+
+		h.userHub.SendToUser(member.ID, unreadData)
+	}
 
 	response := MessageResponse{
 		Message: message,
