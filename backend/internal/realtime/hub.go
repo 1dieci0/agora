@@ -5,8 +5,10 @@ import (
 )
 
 type VoiceState struct {
-	UserID    int `json:"user_id"`
-	ChannelID int `json:"channel_id"`
+	UserID    int  `json:"user_id"`
+	ChannelID int  `json:"channel_id"`
+	Muted     bool `json:"muted"`
+	Deafened  bool `json:"deafened"`
 }
 
 type Hub struct {
@@ -19,14 +21,14 @@ type Hub struct {
 	//
 	// serverID
 	//   channelID
-	//      userID -> true
-	voice map[int]map[int]map[int]bool
+	//      userID -> VoiceState
+	voice map[int]map[int]map[int]VoiceState
 }
 
 func NewHub() *Hub {
 	return &Hub{
 		clients: make(map[int]map[*Client]struct{}),
-		voice:   make(map[int]map[int]map[int]bool),
+		voice:   make(map[int]map[int]map[int]VoiceState),
 	}
 }
 
@@ -97,7 +99,7 @@ func (h *Hub) JoinVoice(
 	defer h.mu.Unlock()
 
 	if h.voice[serverID] == nil {
-		h.voice[serverID] = make(map[int]map[int]bool)
+		h.voice[serverID] = make(map[int]map[int]VoiceState)
 	}
 
 	/*
@@ -106,7 +108,9 @@ func (h *Hub) JoinVoice(
 	var previous *VoiceState
 
 	for existingChannelID, users := range h.voice[serverID] {
-		if !users[userID] {
+		state, exists := users[userID]
+
+		if !exists {
 			continue
 		}
 
@@ -123,8 +127,10 @@ func (h *Hub) JoinVoice(
 		delete(users, userID)
 
 		previous = &VoiceState{
-			UserID:    userID,
-			ChannelID: existingChannelID,
+			UserID:    state.UserID,
+			ChannelID: state.ChannelID,
+			Muted:     state.Muted,
+			Deafened:  state.Deafened,
 		}
 
 		if len(users) == 0 {
@@ -139,10 +145,15 @@ func (h *Hub) JoinVoice(
 
 	if h.voice[serverID][channelID] == nil {
 		h.voice[serverID][channelID] =
-			make(map[int]bool)
+			make(map[int]VoiceState)
 	}
 
-	h.voice[serverID][channelID][userID] = true
+	h.voice[serverID][channelID][userID] = VoiceState{
+		UserID:    userID,
+		ChannelID: channelID,
+		Muted:     false,
+		Deafened:  false,
+	}
 
 	return true, previous
 }
@@ -167,7 +178,7 @@ func (h *Hub) LeaveVoice(
 		return false
 	}
 
-	if !users[userID] {
+	if _, exists := users[userID]; !exists {
 		return false
 	}
 
@@ -194,12 +205,9 @@ func (h *Hub) VoiceState(
 
 	channels := h.voice[serverID]
 
-	for channelID, users := range channels {
-		for userID := range users {
-			result = append(result, VoiceState{
-				UserID:    userID,
-				ChannelID: channelID,
-			})
+	for _, users := range channels {
+		for _, state := range users {
+			result = append(result, state)
 		}
 	}
 
@@ -222,7 +230,9 @@ func (h *Hub) LeaveAllVoice(
 	}
 
 	for channelID, users := range channels {
-		if !users[userID] {
+		state, exists := users[userID]
+
+		if !exists {
 			continue
 		}
 
@@ -231,8 +241,10 @@ func (h *Hub) LeaveAllVoice(
 		removed = append(
 			removed,
 			VoiceState{
-				UserID:    userID,
+				UserID:    state.UserID,
 				ChannelID: channelID,
+				Muted:     state.Muted,
+				Deafened:  state.Deafened,
 			},
 		)
 
@@ -246,4 +258,40 @@ func (h *Hub) LeaveAllVoice(
 	}
 
 	return removed
+}
+
+func (h *Hub) UpdateVoiceState(
+	serverID int,
+	channelID int,
+	userID int,
+	muted bool,
+	deafened bool,
+) (*VoiceState, bool) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	channels := h.voice[serverID]
+
+	if channels == nil {
+		return nil, false
+	}
+
+	users := channels[channelID]
+
+	if users == nil {
+		return nil, false
+	}
+
+	state, exists := users[userID]
+
+	if !exists {
+		return nil, false
+	}
+
+	state.Muted = muted
+	state.Deafened = deafened
+
+	users[userID] = state
+
+	return &state, true
 }

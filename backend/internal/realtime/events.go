@@ -8,6 +8,8 @@ type Event struct {
 type ClientEvent struct {
 	Type string `json:"type"`
 	Data struct {
-		ChannelID int `json:"channel_id"`
+		ChannelID int  `json:"channel_id"`
+		Muted     bool `json:"muted"`
+		Deafened  bool `json:"deafened"`
 	} `json:"data"`
 }

@@ -212,7 +212,68 @@ func (h *Handler) handleMessage(
 			client,
 			event.Data.ChannelID,
 		)
+
+	case "voice_update":
+		h.handleVoiceUpdate(
+			client,
+			event.Data.ChannelID,
+			event.Data.Muted,
+			event.Data.Deafened,
+		)
 	}
+}
+
+func (h *Handler) handleVoiceUpdate(
+	client *Client,
+	channelID int,
+	muted bool,
+	deafened bool,
+) {
+	/*
+	 * Validate the channel belongs to this server.
+	 */
+	channel, err := h.channelRepo.GetByID(channelID)
+
+	if err != nil {
+		return
+	}
+
+	if channel.ServerID != client.ServerID {
+		return
+	}
+
+	/*
+	 * Update the user's current voice state.
+	 */
+	state, changed := h.hub.UpdateVoiceState(
+		client.ServerID,
+		channelID,
+		client.UserID,
+		muted,
+		deafened,
+	)
+
+	if !changed || state == nil {
+		return
+	}
+
+	/*
+	 * Tell everyone on the server about the
+	 * updated mute/deafen state.
+	 */
+	data, err := json.Marshal(Event{
+		Type: "voice_update",
+		Data: *state,
+	})
+
+	if err != nil {
+		return
+	}
+
+	h.hub.BroadcastServer(
+		client.ServerID,
+		data,
+	)
 }
 
 func (h *Handler) handleVoiceJoin(
@@ -270,6 +331,8 @@ func (h *Handler) handleVoiceJoin(
 		Data: VoiceState{
 			UserID:    client.UserID,
 			ChannelID: channelID,
+			Muted:     false,
+			Deafened:  false,
 		},
 	})
 
@@ -315,6 +378,8 @@ func (h *Handler) handleVoiceLeave(
 		Data: VoiceState{
 			UserID:    client.UserID,
 			ChannelID: channelID,
+			Muted:     false,
+			Deafened:  false,
 		},
 	})
 

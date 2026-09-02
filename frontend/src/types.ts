@@ -66,6 +66,7 @@ export type RealtimeEvent =
       type: "voice_leave";
       data: VoiceState;
     }
+  | { type: "voice_update"; data: VoiceState }
   | {
       type: "message_created";
       data: Message;

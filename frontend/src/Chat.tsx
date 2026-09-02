@@ -260,6 +260,18 @@ function Chat({ user, onLogout, onUserUpdate }: ChatProps) {
 
             break;
           }
+          case "voice_update": {
+            setVoiceStates((current) =>
+              current.map((state) =>
+                state.user_id === message.data.user_id &&
+                state.channel_id === message.data.channel_id
+                  ? message.data
+                  : state,
+              ),
+            );
+
+            break;
+          }
           case "user_updated": {
             const updatedUser = message.data;
 
@@ -381,6 +393,9 @@ function Chat({ user, onLogout, onUserUpdate }: ChatProps) {
           }),
         );
 
+        setMuted(false);
+        setDeafened(false);
+
         return null;
       }
 
@@ -393,6 +408,9 @@ function Chat({ user, onLogout, onUserUpdate }: ChatProps) {
             },
           }),
         );
+
+        setMuted(false);
+        setDeafened(false);
       }
 
       socket.send(
@@ -447,6 +465,8 @@ function Chat({ user, onLogout, onUserUpdate }: ChatProps) {
     }
 
     setActiveVoiceChannelId(null);
+    setMuted(false);
+    setDeafened(false);
     setVoiceStates([]);
     setSelectedServerId(serverID);
   }
@@ -602,6 +622,10 @@ function Chat({ user, onLogout, onUserUpdate }: ChatProps) {
       );
 
   function toggleMute() {
+    if (activeVoiceChannelId === null) {
+      return;
+    }
+
     const nextMuted = !muted;
 
     setMuted(nextMuted);
@@ -613,6 +637,10 @@ function Chat({ user, onLogout, onUserUpdate }: ChatProps) {
   }
 
   function toggleDeafen() {
+    if (activeVoiceChannelId === null) {
+      return;
+    }
+
     const nextDeafened = !deafened;
 
     /*
