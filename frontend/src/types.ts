@@ -58,6 +58,7 @@ type UnreadUpdate = {
   channel_id: number;
   message_id: number;
   user_id: number;
+  unread_count: number;
 };
 
 export type RealtimeEvent =

@@ -73,6 +73,7 @@ func NewApp() (*App, error) {
 			messageRepo,
 			channelRepo,
 			serverRepo,
+			unreadRepo,
 			hub,
 			userHub,
 		),

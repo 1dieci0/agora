@@ -120,21 +120,18 @@ function Chat({ user, onLogout, onUserUpdate }: ChatProps) {
           return;
         }
 
-        setUnreadChannels((current) => ({
-          ...current,
-          [update.channel_id]: {
-            channel_id: update.channel_id,
-            server_id: update.server_id,
-            unread_count:
-              (current[update.channel_id]
-                ?.unread_count ?? 0) + 1,
-            last_message_id:
-              update.message_id,
-            last_read_message_id:
-              current[update.channel_id]
-                ?.last_read_message_id ?? 0,
-          },
-        }));
+      setUnreadChannels((current) => ({
+        ...current,
+        [update.channel_id]: {
+          channel_id: update.channel_id,
+          server_id: update.server_id,
+          unread_count: update.unread_count,
+          last_message_id: update.message_id,
+          last_read_message_id:
+            current[update.channel_id]
+              ?.last_read_message_id ?? 0,
+        },
+      }));
       } catch (error) {
         console.error(
           "Could not process user realtime event:",

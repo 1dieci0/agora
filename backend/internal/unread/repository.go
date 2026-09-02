@@ -118,3 +118,27 @@ func (r *Repository) MessageExists(
 
 	return exists, err
 }
+
+func (r *Repository) GetChannelUnreadCount(
+	userID int,
+	channelID int,
+) (int, error) {
+	var count int
+
+	err := r.db.QueryRow(`
+        SELECT COUNT(*)
+        FROM messages m
+        LEFT JOIN channel_read_state rs
+            ON rs.channel_id = m.channel_id
+            AND rs.user_id = ?
+        WHERE m.channel_id = ?
+          AND m.id > COALESCE(rs.last_read_message_id, 0)
+          AND m.user_id != ?
+    `,
+		userID,
+		channelID,
+		userID,
+	).Scan(&count)
+
+	return count, err
+}

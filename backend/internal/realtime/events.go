@@ -15,8 +15,9 @@ type ClientEvent struct {
 }
 
 type UnreadUpdate struct {
-	ServerID  int `json:"server_id"`
-	ChannelID int `json:"channel_id"`
-	MessageID int `json:"message_id"`
-	UserID    int `json:"user_id"`
+	ServerID    int `json:"server_id"`
+	ChannelID   int `json:"channel_id"`
+	MessageID   int `json:"message_id"`
+	UserID      int `json:"user_id"`
+	UnreadCount int `json:"unread_count"`
 }

@@ -3,6 +3,7 @@ package messages
 import (
 	"database/sql"
 	"encoding/json"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -10,6 +11,7 @@ import (
 	"agora/internal/channels"
 	"agora/internal/realtime"
 	"agora/internal/servers"
+	"agora/internal/unread"
 	"agora/internal/users"
 )
 
@@ -19,12 +21,14 @@ type Handler struct {
 	serverRepo  *servers.Repository
 	hub         *realtime.Hub
 	userHub     *realtime.UserHub
+	unreadRepo  *unread.Repository
 }
 
 func NewHandler(
 	repo *Repository,
 	channelRepo *channels.Repository,
 	serverRepo *servers.Repository,
+	unreadRepo *unread.Repository,
 	hub *realtime.Hub,
 	userHub *realtime.UserHub,
 ) *Handler {
@@ -32,6 +36,7 @@ func NewHandler(
 		repo:        repo,
 		channelRepo: channelRepo,
 		serverRepo:  serverRepo,
+		unreadRepo:  unreadRepo,
 		hub:         hub,
 		userHub:     userHub,
 	}
@@ -129,40 +134,52 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 
 	members, err := h.serverRepo.GetMembers(serverID)
 	if err != nil {
-		http.Error(
-			w,
-			"Internal server error",
-			http.StatusInternalServerError,
+		log.Printf(
+			"Could not get server members for unread update: %v",
+			err,
 		)
-		return
-	}
+	} else {
+		for _, member := range members {
+			if member.ID == userID {
+				continue
+			}
 
-	unreadEvent := realtime.Event{
-		Type: "unread_update",
-		Data: realtime.UnreadUpdate{
-			ServerID:  serverID,
-			ChannelID: channelID,
-			MessageID: int(message.ID),
-			UserID:    userID,
-		},
-	}
+			unreadCount, err := h.unreadRepo.GetChannelUnreadCount(
+				member.ID,
+				channelID,
+			)
+			if err != nil {
+				log.Printf(
+					"Could not get unread count: user=%d channel=%d: %v",
+					member.ID,
+					channelID,
+					err,
+				)
+				continue
+			}
 
-	unreadData, err := json.Marshal(unreadEvent)
-	if err != nil {
-		http.Error(
-			w,
-			"Internal server error",
-			http.StatusInternalServerError,
-		)
-		return
-	}
+			unreadEvent := realtime.Event{
+				Type: "unread_update",
+				Data: realtime.UnreadUpdate{
+					ServerID:    serverID,
+					ChannelID:   channelID,
+					MessageID:   int(message.ID),
+					UserID:      userID,
+					UnreadCount: unreadCount,
+				},
+			}
 
-	for _, member := range members {
-		if member.ID == userID {
-			continue
+			unreadData, err := json.Marshal(unreadEvent)
+			if err != nil {
+				log.Printf(
+					"Could not marshal unread update: %v",
+					err,
+				)
+				continue
+			}
+
+			h.userHub.SendToUser(member.ID, unreadData)
 		}
-
-		h.userHub.SendToUser(member.ID, unreadData)
 	}
 
 	response := MessageResponse{

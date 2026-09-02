@@ -126,6 +126,14 @@ function ChatWindow({
   }, [channel]);
 
   useEffect(() => {
+    if (channel !== null) {
+      requestAnimationFrame(() => {
+        messageInputRef.current?.focus();
+      });
+    }
+  }, [channel]);
+
+  useEffect(() => {
     messagesEndRef.current?.scrollIntoView({
       behavior: "smooth",
     });
@@ -171,6 +179,7 @@ function ChatWindow({
       await sendMessage(channel.id, trimmed);
 
       setContent("");
+
       if (messageInputRef.current) {
         messageInputRef.current.style.height = "auto";
       }
@@ -180,6 +189,12 @@ function ChatWindow({
       setLoading(false);
     }
   }
+
+  useEffect(() => {
+    if (!loading) {
+      messageInputRef.current?.focus();
+    }
+  }, [loading]);
 
   async function handleDelete(messageID: number) {
   try {
