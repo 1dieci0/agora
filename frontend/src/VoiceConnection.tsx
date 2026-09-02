@@ -1,15 +1,41 @@
-import { useEffect} from "react";
+import { useEffect, useRef} from "react";
 import { getVoiceToken } from "./api";
 import type { Member} from "./types";
 
 type VoiceConnectionProps = {
   channelId: number;
+  muted: boolean;
+  deafened: boolean;
 };
 
 
 export default function VoiceConnection({
   channelId,
+  muted,
+  deafened,
 }: VoiceConnectionProps) {
+  const streamRef = useRef<MediaStream | null>(null);
+  const remoteAudiosRef = useRef<HTMLAudioElement[]>([]);
+
+  useEffect(() => {
+    const stream = streamRef.current;
+
+    if (!stream) {
+      return;
+    }
+
+    for (const track of stream.getAudioTracks()) {
+      track.enabled = !muted && !deafened;
+    }
+  }, [muted, deafened]);
+
+
+  useEffect(() => {
+    for (const audio of remoteAudiosRef.current) {
+      audio.muted = deafened;
+    }
+  }, [deafened]);
+
   useEffect(() => {
     let cancelled = false;
 
@@ -17,9 +43,8 @@ export default function VoiceConnection({
     let pc: RTCPeerConnection | null = null;
     let ws: WebSocket | null = null;
 
-    const remoteAudios: HTMLAudioElement[] = [];
+    const remoteAudios = remoteAudiosRef.current;
     let negotiationChain = Promise.resolve();
-
 
     async function start() {
       try {
@@ -38,6 +63,8 @@ export default function VoiceConnection({
             },
             video: false,
           });
+
+        streamRef.current = stream;
 
         if (cancelled) {
           stream
@@ -84,6 +111,7 @@ export default function VoiceConnection({
           const audio = new Audio();
 
           audio.autoplay = true;
+          audio.muted = deafened;
           audio.srcObject = remoteStream;
 
           remoteAudios.push(audio);

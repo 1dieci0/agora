@@ -2,6 +2,13 @@ import { API_URL } from "./api";
 import type { Channel, VoiceParticipant} from "./types";
 import VoiceChannel from "./VoiceChannel";
 
+
+import MicIcon from "./assets/mic.svg";
+import MicMutedIcon from "./assets/mic-muted.svg";
+import HeadphonesIcon from "./assets/headphones.svg";
+import DeafenedIcon from "./assets/headphones-deafened.svg";
+
+
 type ChannelSidebarProps = {
   channels: Channel[];
   selectedChannelId: number | null;
@@ -135,11 +142,31 @@ function ChannelSidebar({
                         {participant.username}
                       </span>
 
-                      {participant.muted && (
-                        <span className="voice-participant-muted">
-                          🔇
-                        </span>
-                      )}
+                    <div className="voice-participant-status">
+                        {participant.muted && (
+                          <span
+                            className="voice-status-icon muted"
+                            title="Muted"
+                          >
+                              <img
+                                src={MicMutedIcon}
+                                alt=""
+                              />
+                          </span>
+                        )}
+
+                        {participant.deafened && (
+                          <span
+                            className="voice-status-icon deafened"
+                            title="Deafened"
+                          >
+                            <img
+                              src={DeafenedIcon}
+                              alt=""
+                            />
+                          </span>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>

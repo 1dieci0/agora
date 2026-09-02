@@ -40,6 +40,7 @@ export type VoiceParticipant = {
   username: string;
   avatar_url: string | null;
   muted: boolean;
+  deafened: boolean;
   speaking: boolean;
 };
 
@@ -48,6 +49,8 @@ export type VoiceParticipant = {
 export type VoiceState = {
   user_id: number;
   channel_id: number;
+  muted: boolean;
+  deafened: boolean;
 };
 
 export type RealtimeEvent =

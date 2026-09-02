@@ -67,6 +67,9 @@ function Chat({ user, onLogout, onUserUpdate }: ChatProps) {
   const [activeVoiceChannelId, setActiveVoiceChannelId] =
     useState<number | null>(null);
 
+  const [muted, setMuted] = useState(false);
+  const [deafened, setDeafened] = useState(false);
+
   const [voiceStates, setVoiceStates] = useState<VoiceState[]>([]);
 
   /*
@@ -404,6 +407,32 @@ function Chat({ user, onLogout, onUserUpdate }: ChatProps) {
       return channelId;
     });
   }
+
+  function sendVoiceStateUpdate(
+    nextMuted: boolean,
+    nextDeafened: boolean,
+  ) {
+    const socket = realtimeSocketRef.current;
+
+    if (
+      !socket ||
+      socket.readyState !== WebSocket.OPEN ||
+      activeVoiceChannelId === null
+    ) {
+      return;
+    }
+
+    socket.send(
+      JSON.stringify({
+        type: "voice_update",
+        data: {
+          channel_id: activeVoiceChannelId,
+          muted: nextMuted,
+          deafened: nextDeafened,
+        },
+      }),
+    );
+  }
   
 
   /*
@@ -551,7 +580,17 @@ function Chat({ user, onLogout, onUserUpdate }: ChatProps) {
           avatar_url:
             member.avatar_url ?? null,
 
-          muted: false,
+          muted:
+            state.user_id === user.id
+              ? muted
+              : state.muted,
+
+          deafened:
+            state.user_id === user.id
+              ? deafened
+              : state.deafened,
+
+
           speaking: false,
         };
       })
@@ -562,6 +601,34 @@ function Chat({ user, onLogout, onUserUpdate }: ChatProps) {
           participant !== null,
       );
 
+  function toggleMute() {
+    const nextMuted = !muted;
+
+    setMuted(nextMuted);
+
+    sendVoiceStateUpdate(
+      nextMuted,
+      deafened,
+    );
+  }
+
+  function toggleDeafen() {
+    const nextDeafened = !deafened;
+
+    /*
+    * Deafening automatically mutes you.
+    */
+    const nextMuted =
+      nextDeafened ? true : muted;
+
+    setDeafened(nextDeafened);
+    setMuted(nextMuted);
+
+    sendVoiceStateUpdate(
+      nextMuted,
+      nextDeafened,
+    );
+  }
 
   return (
     <div className="app">
@@ -609,6 +676,10 @@ function Chat({ user, onLogout, onUserUpdate }: ChatProps) {
 
         <UserPanel
           user={user}
+          muted={muted}
+          deafened={deafened}
+          onToggleMute={toggleMute}
+          onToggleDeafen={toggleDeafen}
           onOpenProfile={() =>
             setShowProfile(true)
           }
@@ -680,6 +751,8 @@ function Chat({ user, onLogout, onUserUpdate }: ChatProps) {
       {activeVoiceChannelId !== null && (
         <VoiceConnection
           channelId={activeVoiceChannelId}
+          muted={muted}
+          deafened={deafened}
         />
       )}
     </div>
