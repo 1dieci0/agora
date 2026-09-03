@@ -2286,3 +2286,39 @@ button:focus-visible {
 
   border: 2px solid #111318;
 }
+
+.notification-item {
+  width: 100%;
+  padding: 12px 14px;
+  border: none;
+  border-bottom: 1px solid #292d38;
+  background: transparent;
+  color: #d1d5db;
+  text-align: left;
+  cursor: pointer;
+}
+
+.notification-item:hover {
+  background: #292d38;
+}
+
+.notification-item.unread {
+  background: #252a36;
+}
+
+
+.message-highlight {
+  background: rgba(88, 101, 242, 0.25);
+  border-radius: 6px;
+}
+
+.message.message-highlight {
+  background: rgba(88, 101, 242, 0.25);
+  border-radius: 6px;
+}
+
+.message-mentioned {
+  background: rgba(237, 66, 69, 0.12);
+  border-left: 3px solid #ed4245;
+  border-radius: 6px;
+}

@@ -20,6 +20,8 @@ type ChatWindowProps = {
   members: Member[];
   realtimeEvent: RealtimeEvent | null;
   onLatestMessage: (channelID: number, messageID: number) => void;
+  highlightedMessageId: number | null;
+  onClearHighlight: () => void;
 };
 
 function ChatWindow({
@@ -28,6 +30,8 @@ function ChatWindow({
   members,
   realtimeEvent,
   onLatestMessage,
+  highlightedMessageId,
+  onClearHighlight,
 }: ChatWindowProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [content, setContent] = useState("");
@@ -143,6 +147,33 @@ function ChatWindow({
       behavior: "smooth",
     });
   }, [messages]);
+
+  useEffect(() => {
+    if (highlightedMessageId === null) {
+      return;
+    }
+
+    const element = document.getElementById(
+      `message-${highlightedMessageId}`,
+    );
+
+    if (!element) {
+      return;
+    }
+
+    element.scrollIntoView({
+      behavior: "smooth",
+      block: "center",
+    });
+
+    const timeout = window.setTimeout(() => {
+      onClearHighlight();
+    }, 2000);
+
+    return () => {
+      window.clearTimeout(timeout);
+    };
+  }, [messages, highlightedMessageId]);
 
 
   function handleContentChange(
@@ -290,8 +321,24 @@ function ChatWindow({
           const isOwnMessage = message.user_id === user.id;
           const isEditing = editingMessageID === message.id;
 
-          return (
-            <div className="message" key={message.id}>
+          const isMentioned = message.content
+            .toLowerCase()
+            .includes(`@${user.username.toLowerCase()}`);
+
+              return (
+                <div
+                  className={[
+                    "message",
+                    isMentioned ? "message-mentioned" : "",
+                    message.id === highlightedMessageId
+                      ? "message-highlight"
+                      : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" ")}
+                  id={`message-${message.id}`}
+                  key={message.id}
+                >
                <div className="message-avatar">
                   {member?.avatar_url ? (
                     <img

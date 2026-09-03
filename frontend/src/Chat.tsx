@@ -93,13 +93,15 @@ function Chat({ user, onLogout, onUserUpdate }: ChatProps) {
   const pendingChannelIdRef =
     useRef<number | null>(null);
 
+  const [highlightedMessageId, setHighlightedMessageId] =
+    useState<number | null>(null);
+
 
   /*
    * The realtime WebSocket for the currently selected server.
    */
   const realtimeSocketRef = useRef<WebSocket | null>(null);
   const userRealtimeSocketRef = useRef<WebSocket | null>(null);
-
 
   useEffect(() => {
     selectedChannelIdRef.current = selectedChannelId;
@@ -748,7 +750,8 @@ function Chat({ user, onLogout, onUserUpdate }: ChatProps) {
   ) {
     if (
       notification.server_id === null ||
-      notification.channel_id === null
+      notification.channel_id === null ||
+      notification.message_id === null
     ) {
       return;
     }
@@ -763,6 +766,10 @@ function Chat({ user, onLogout, onUserUpdate }: ChatProps) {
         notification.server_id,
       );
     }
+
+    setHighlightedMessageId(
+      notification.message_id,
+    );
 
     setShowNotifications(false);
   }
@@ -1096,6 +1103,8 @@ function Chat({ user, onLogout, onUserUpdate }: ChatProps) {
         members={members}
         realtimeEvent={realtimeMessageEvent}
         onLatestMessage={handleLatestMessage}
+        highlightedMessageId={highlightedMessageId}
+        onClearHighlight={() => setHighlightedMessageId(null)}
       />
 
       <MembersSidebar

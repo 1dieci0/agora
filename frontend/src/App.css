@@ -182,23 +182,3 @@
     border-right-color: var(--border);
   }
 }
-
-
-.notification-item {
-  width: 100%;
-  padding: 12px 14px;
-  border: none;
-  border-bottom: 1px solid #292d38;
-  background: transparent;
-  color: #d1d5db;
-  text-align: left;
-  cursor: pointer;
-}
-
-.notification-item:hover {
-  background: #292d38;
-}
-
-.notification-item.unread {
-  background: #252a36;
-}
