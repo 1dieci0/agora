@@ -111,6 +111,42 @@ func SetupDatabase(db *sql.DB) error {
 		CREATE INDEX IF NOT EXISTS idx_channel_read_state_channel_id
 		ON channel_read_state(channel_id);
 
+		CREATE TABLE IF NOT EXISTS notifications (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+			user_id INTEGER NOT NULL,
+			type TEXT NOT NULL,
+
+			server_id INTEGER,
+			channel_id INTEGER,
+			message_id INTEGER,
+			from_user_id INTEGER,
+
+			read BOOLEAN NOT NULL DEFAULT 0,
+
+			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+			FOREIGN KEY (user_id)
+				REFERENCES users(id)
+				ON DELETE CASCADE,
+
+			FOREIGN KEY (server_id)
+				REFERENCES servers(id)
+				ON DELETE CASCADE,
+
+			FOREIGN KEY (channel_id)
+				REFERENCES channels(id)
+				ON DELETE CASCADE,
+
+			FOREIGN KEY (message_id)
+				REFERENCES messages(id)
+				ON DELETE CASCADE,
+
+			FOREIGN KEY (from_user_id)
+				REFERENCES users(id)
+				ON DELETE CASCADE
+		);
+
 	`)
 
 	return err

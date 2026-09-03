@@ -11,6 +11,7 @@ import {
   getUnread,
   markChannelRead,
   type ChannelUnread,
+  getNotifications,
 } from "./api";
 
 import type {
@@ -22,6 +23,7 @@ import type {
   Message,
   RealtimeEvent,
   VoiceState,
+  AppNotification,
 } from "./types";
 
 import ServerSidebar from "./ServerSidebar";
@@ -78,6 +80,15 @@ function Chat({ user, onLogout, onUserUpdate }: ChatProps) {
   const [unreadChannels, setUnreadChannels] =
     useState<Record<number, ChannelUnread>>({});  
 
+  const [notifications, setNotifications] =
+    useState<AppNotification[]>([]);
+
+  const [showNotifications, setShowNotifications] =
+    useState(false);
+
+  const [pendingChannelId, setPendingChannelId] =
+    useState<number | null>(null);
+
   /*
    * The realtime WebSocket for the currently selected server.
    */
@@ -100,45 +111,70 @@ function Chat({ user, onLogout, onUserUpdate }: ChatProps) {
       );
     };
 
-    socket.onmessage = (event) => {
-      try {
-        const message: RealtimeEvent =
-          JSON.parse(event.data);
+  socket.onmessage = (event) => {
+    try {
+      const message: RealtimeEvent =
+        JSON.parse(event.data);
 
-        console.log(
-          "user realtime event:",
-          message
-        );
+      console.log(
+        "user realtime event:",
+        message,
+      );
 
-        if (message.type !== "unread_update") {
-          return;
+      switch (message.type) {
+        case "unread_update": {
+          const update = message.data;
+
+          if (update.user_id === user.id) {
+            return;
+          }
+
+          setUnreadChannels((current) => ({
+            ...current,
+            [update.channel_id]: {
+              channel_id: update.channel_id,
+              server_id: update.server_id,
+              unread_count: update.unread_count,
+              last_message_id: update.message_id,
+              last_read_message_id:
+                current[update.channel_id]
+                  ?.last_read_message_id ?? 0,
+            },
+          }));
+
+          break;
         }
 
-        const update = message.data;
+        case "mention": {
+          const mention = message.data;
 
-        if (update.user_id === user.id) {
-          return;
+          const notification: AppNotification = {
+            id: mention.id,
+            user_id: user.id,
+            type: "mention",
+            server_id: mention.server_id,
+            channel_id: mention.channel_id,
+            message_id: mention.message_id,
+            from_user_id: mention.from_user_id,
+            read: false,
+            created_at: new Date().toISOString(),
+          };
+
+          setNotifications((current) => [
+            notification,
+            ...current,
+          ]);
+
+          break;
         }
-
-      setUnreadChannels((current) => ({
-        ...current,
-        [update.channel_id]: {
-          channel_id: update.channel_id,
-          server_id: update.server_id,
-          unread_count: update.unread_count,
-          last_message_id: update.message_id,
-          last_read_message_id:
-            current[update.channel_id]
-              ?.last_read_message_id ?? 0,
-        },
-      }));
-      } catch (error) {
-        console.error(
-          "Could not process user realtime event:",
-          error,
-        );
       }
-    };
+    } catch (error) {
+      console.error(
+        "Could not process user realtime event:",
+        error,
+      );
+    }
+  };
 
     socket.onerror = (error) => {
       console.error(
@@ -193,6 +229,24 @@ function Chat({ user, onLogout, onUserUpdate }: ChatProps) {
     loadUnread();
   }, []);
 
+  useEffect(() => {
+    async function loadNotifications() {
+      try {
+        const notifications =
+          await getNotifications();
+
+        setNotifications(notifications);
+      } catch (error) {
+        console.error(
+          "Could not load notifications:",
+          error,
+        );
+      }
+    }
+
+    loadNotifications();
+  }, []);
+
 
   /*
    * -------------------------
@@ -240,7 +294,19 @@ function Chat({ user, onLogout, onUserUpdate }: ChatProps) {
         setChannels(channels);
 
         if (channels.length > 0) {
-          setSelectedChannelId(channels[0].id);
+          const pendingChannelExists =
+            pendingChannelId !== null &&
+            channels.some(
+              (channel) =>
+                channel.id === pendingChannelId,
+            );
+
+          if (pendingChannelExists) {
+            setSelectedChannelId(pendingChannelId);
+            setPendingChannelId(null);
+          } else {
+            setSelectedChannelId(channels[0].id);
+          }
         } else {
           setSelectedChannelId(null);
         }
@@ -252,7 +318,7 @@ function Chat({ user, onLogout, onUserUpdate }: ChatProps) {
     }
 
     loadChannels();
-  }, [selectedServerId]);
+  }, [selectedServerId, pendingChannelId]);
 
   /*
    * -------------------------
@@ -432,24 +498,6 @@ function Chat({ user, onLogout, onUserUpdate }: ChatProps) {
 
           case "message_created": {
             setRealtimeMessageEvent(message);
-
-            const newMessage = message.data;
-
-            if (newMessage.user_id === user.id) {
-              break;
-            }
-
-            if (newMessage.channel_id === selectedChannelId) {
-              break;
-            }
-
-            refreshUnread();
-
-            break;
-          }
-
-          case "message_deleted": {
-            setRealtimeMessageEvent(message);
             break;
           }
           case "message_updated":
@@ -498,7 +546,7 @@ function Chat({ user, onLogout, onUserUpdate }: ChatProps) {
         realtimeSocketRef.current = null;
       }
     };
-  }, [selectedServerId, selectedChannelId, refreshUnread]);
+  }, [selectedServerId]);
 
   const handleLatestMessage = useCallback(
     async (channelID: number, messageID: number) => {
@@ -628,6 +676,18 @@ function Chat({ user, onLogout, onUserUpdate }: ChatProps) {
         },
       }),
     );
+  }
+
+  //notifs
+
+  function handleNotificationClick(
+    notification: AppNotification,
+  ) {
+    setPendingChannelId(notification.channel_id);
+
+    setSelectedServerId(notification.server_id);
+
+    setShowNotifications(false);
   }
   
 
@@ -844,6 +904,56 @@ function Chat({ user, onLogout, onUserUpdate }: ChatProps) {
 
   return (
     <div className="app">
+      <button
+        className="notification-button"
+        onClick={() => setShowNotifications((current) => !current)}
+      >
+        🔔
+
+        {notifications.some((notification) => !notification.read) && (
+          <span className="notification-badge">
+            {notifications.filter(
+              (notification) => !notification.read
+            ).length}
+          </span>
+        )}
+      </button>
+
+      {showNotifications && (
+        <div className="notifications-panel">
+          <div className="notifications-header">
+            <strong>Notifications</strong>
+          </div>
+
+          {notifications.length === 0 ? (
+            <div className="notifications-empty">
+              No notifications
+            </div>
+          ) : (
+            notifications.map((notification) => (
+              <button
+                key={notification.id}
+                className={`notification-item ${
+                  notification.read ? "" : "unread"
+                }`}
+                onClick={() =>
+                  handleNotificationClick(notification)
+                }
+              >
+                <div className="notification-title">
+                  You were mentioned
+                </div>
+
+                <div className="notification-meta">
+                  Open the message to view it
+                </div>
+              </button>
+            ))
+          )}
+        </div>
+      )}
+
+
       <ServerSidebar
         servers={servers}
         selectedServerId={selectedServerId}
@@ -856,6 +966,7 @@ function Chat({ user, onLogout, onUserUpdate }: ChatProps) {
           setShowJoinServer(true)
         }
         unreadServerIds={unreadServerIds}
+        notifications={notifications}
       />
 
       <div className="channel-area">
@@ -885,6 +996,7 @@ function Chat({ user, onLogout, onUserUpdate }: ChatProps) {
               voiceParticipants
             }
             unreadChannels={unreadChannels}
+            notifications={notifications}
           />
         )}
 

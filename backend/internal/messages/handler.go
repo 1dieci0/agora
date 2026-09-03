@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"agora/internal/channels"
+	"agora/internal/notifications"
 	"agora/internal/realtime"
 	"agora/internal/servers"
 	"agora/internal/unread"
@@ -16,12 +17,13 @@ import (
 )
 
 type Handler struct {
-	repo        *Repository
-	channelRepo *channels.Repository
-	serverRepo  *servers.Repository
-	hub         *realtime.Hub
-	userHub     *realtime.UserHub
-	unreadRepo  *unread.Repository
+	repo             *Repository
+	channelRepo      *channels.Repository
+	serverRepo       *servers.Repository
+	hub              *realtime.Hub
+	userHub          *realtime.UserHub
+	unreadRepo       *unread.Repository
+	notificationRepo *notifications.Repository
 }
 
 func NewHandler(
@@ -31,14 +33,16 @@ func NewHandler(
 	unreadRepo *unread.Repository,
 	hub *realtime.Hub,
 	userHub *realtime.UserHub,
+	notificationRepo *notifications.Repository,
 ) *Handler {
 	return &Handler{
-		repo:        repo,
-		channelRepo: channelRepo,
-		serverRepo:  serverRepo,
-		unreadRepo:  unreadRepo,
-		hub:         hub,
-		userHub:     userHub,
+		repo:             repo,
+		channelRepo:      channelRepo,
+		serverRepo:       serverRepo,
+		unreadRepo:       unreadRepo,
+		hub:              hub,
+		userHub:          userHub,
+		notificationRepo: notificationRepo,
 	}
 }
 
@@ -135,10 +139,82 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	members, err := h.serverRepo.GetMembers(serverID)
 	if err != nil {
 		log.Printf(
-			"Could not get server members for unread update: %v",
+			"Could not get server members for updates: %v",
 			err,
 		)
 	} else {
+		mentions := extractMentions(data.Content)
+
+		// ----------------------------------------
+		// Mention notifications
+		// ----------------------------------------
+
+		if len(mentions) > 0 {
+			mentionedUsers := make(map[string]bool)
+
+			for _, username := range mentions {
+				mentionedUsers[strings.ToLower(username)] = true
+			}
+
+			for _, member := range members {
+				// Don't notify yourself.
+				if member.ID == userID {
+					continue
+				}
+
+				username := strings.ToLower(member.Username)
+
+				if !mentionedUsers[username] {
+					continue
+				}
+
+				notificationID, err := h.notificationRepo.CreateMention(
+					member.ID,
+					serverID,
+					channelID,
+					int(message.ID),
+					userID,
+				)
+
+				if err != nil {
+					log.Printf(
+						"Could not create mention notification: %v",
+						err,
+					)
+					continue
+				}
+
+				mentionEvent := realtime.Event{
+					Type: "mention",
+					Data: realtime.MentionNotification{
+						ID:         notificationID,
+						ServerID:   serverID,
+						ChannelID:  channelID,
+						MessageID:  int(message.ID),
+						FromUserID: userID,
+					},
+				}
+
+				mentionData, err := json.Marshal(mentionEvent)
+				if err != nil {
+					log.Printf(
+						"Could not marshal mention notification: %v",
+						err,
+					)
+					continue
+				}
+
+				h.userHub.SendToUser(
+					member.ID,
+					mentionData,
+				)
+			}
+		}
+
+		// ----------------------------------------
+		// Unread updates
+		// ----------------------------------------
+
 		for _, member := range members {
 			if member.ID == userID {
 				continue
@@ -148,6 +224,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 				member.ID,
 				channelID,
 			)
+
 			if err != nil {
 				log.Printf(
 					"Could not get unread count: user=%d channel=%d: %v",
@@ -413,4 +490,40 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	h.hub.BroadcastServer(serverID, eventData)
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func extractMentions(content string) []string {
+	words := strings.Fields(content)
+
+	mentions := make([]string, 0)
+	seen := make(map[string]bool)
+
+	for _, word := range words {
+		if !strings.HasPrefix(word, "@") {
+			continue
+		}
+
+		username := strings.TrimPrefix(word, "@")
+
+		// Remove punctuation commonly placed after a mention.
+		username = strings.TrimRight(
+			username,
+			".,!?;:)]}",
+		)
+
+		if username == "" {
+			continue
+		}
+
+		username = strings.ToLower(username)
+
+		if seen[username] {
+			continue
+		}
+
+		seen[username] = true
+		mentions = append(mentions, username)
+	}
+
+	return mentions
 }

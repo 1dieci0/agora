@@ -2059,3 +2059,230 @@ button:focus-visible {
 
   background: rgba(255, 255, 255, 0.8);
 }
+
+.message-input-wrapper textarea {
+  width: 100%;
+}
+
+
+/* =========================================================
+   MESSAGE INPUT / MENTION AUTOCOMPLETE
+   ========================================================= */
+
+.message-input-wrapper {
+  position: relative;
+
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 44px;
+
+  display: flex;
+}
+
+.message-input-wrapper textarea {
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+}
+
+.mention-autocomplete {
+  position: absolute;
+
+  left: 0;
+  bottom: calc(100% + 8px);
+
+  width: 280px;
+  max-width: 100%;
+
+  display: flex;
+  flex-direction: column;
+
+  padding: 6px;
+
+  background: #1f232d;
+  border: 1px solid #292d38;
+  border-radius: 8px;
+
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+
+  z-index: 100;
+}
+
+.mention-autocomplete button {
+  width: 100%;
+
+  padding: 8px 10px;
+
+  border: none;
+  border-radius: 5px;
+
+  background: transparent;
+  color: #d1d5db;
+
+  text-align: left;
+
+  font-size: 14px;
+
+  cursor: pointer;
+}
+
+.mention-autocomplete button:hover {
+  background: #292d38;
+  color: #ffffff;
+}
+
+.mention-autocomplete button.selected {
+  background: #292d38;
+  color: #ffffff;
+}
+
+
+.notification-button {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #d1d5db;
+  font-size: 18px;
+  cursor: pointer;
+}
+
+.notification-button:hover {
+  background: #292d38;
+}
+
+.notification-badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: #ed4245;
+  color: white;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.notifications-panel {
+  position: absolute;
+  top: 48px;
+  right: 0;
+  width: 320px;
+  max-height: 420px;
+  overflow-y: auto;
+  background: #1f232d;
+  border: 1px solid #292d38;
+  border-radius: 8px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  z-index: 200;
+}
+
+.notifications-header {
+  padding: 12px 14px;
+  border-bottom: 1px solid #292d38;
+  color: #ffffff;
+}
+
+.notifications-empty {
+  padding: 20px;
+  color: #8b92a3;
+  text-align: center;
+  font-size: 14px;
+}
+
+.notification-item {
+  padding: 12px 14px;
+  border-bottom: 1px solid #292d38;
+  color: #d1d5db;
+}
+
+.notification-item.unread {
+  background: #252a36;
+}
+
+.notification-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #ffffff;
+}
+
+.notification-meta {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #8b92a3;
+}
+
+.channel-button.has-unread {
+  color: white;
+  font-weight: 600;
+}
+
+.channel-button.has-unread .channel-name {
+  color: white;
+}
+
+.channel-button.has-mention {
+  color: white;
+}
+
+.channel-mention-badge {
+  margin-left: auto;
+
+  min-width: 18px;
+  height: 18px;
+
+  padding: 0 5px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  border-radius: 999px;
+
+  background: #ed4245;
+  color: white;
+
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.server-button {
+  position: relative;
+}
+
+.server-button.has-unread {
+  /* Keep your existing unread styling here */
+}
+
+.server-mention-badge {
+  position: absolute;
+  right: -4px;
+  bottom: -4px;
+
+  min-width: 18px;
+  height: 18px;
+
+  padding: 0 5px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  border-radius: 999px;
+
+  background: #ed4245;
+  color: white;
+
+  font-size: 11px;
+  font-weight: 700;
+
+  border: 2px solid #111318;
+}

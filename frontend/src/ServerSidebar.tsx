@@ -1,4 +1,4 @@
-import type { Server } from "./types";
+import type { AppNotification, Server } from "./types";
 
 type ServerSidebarProps = {
   servers: Server[];
@@ -8,7 +8,9 @@ type ServerSidebarProps = {
   onCreateServer: () => void;
   onJoinServer: () => void;
   unreadServerIds: Set<number>;
+  notifications: AppNotification[];
 };
+
 
 
 function ServerSidebar({
@@ -19,27 +21,51 @@ function ServerSidebar({
   onCreateServer,
   onJoinServer,
   unreadServerIds,
+  notifications,
 }: ServerSidebarProps) {
   return (
     <aside className="server-sidebar">
       <div className="server-list">
-        {servers.map((server) => (
-          <button
-            key={server.id}
-            className={
-              server.id === selectedServerId
-                ? "server-button selected"
-                : "server-button"
-            }
-            onClick={() => onSelectServer(server.id)}
-          >
-            {server.name.charAt(0).toUpperCase()}
+        {servers.map((server) => {
+          const hasUnread = unreadServerIds.has(server.id);
 
-            {unreadServerIds.has(server.id) && (
-              <span className="server-unread" />
-            )}
-          </button>
-        ))}
+          const mentionCount = notifications.filter(
+            (notification) =>
+              notification.server_id === server.id &&
+              !notification.read,
+          ).length;
+
+          return (
+            <button
+              key={server.id}
+              className={[
+                "server-button",
+                server.id === selectedServerId
+                  ? "selected"
+                  : "",
+                hasUnread ? "has-unread" : "",
+                mentionCount > 0 ? "has-mention" : "",
+              ]
+                .filter(Boolean)
+                .join(" ")}
+              onClick={() =>
+                onSelectServer(server.id)
+              }
+            >
+              {server.name.charAt(0).toUpperCase()}
+
+              {mentionCount > 0 && (
+                <span className="server-mention-badge">
+                  {mentionCount}
+                </span>
+              )}
+
+              {hasUnread && (
+                <span className="server-unread" />
+              )}
+            </button>
+          );
+        })}
       </div>
 
       <button

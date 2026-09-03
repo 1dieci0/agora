@@ -7,6 +7,7 @@ import (
 	"agora/internal/channels"
 	"agora/internal/database"
 	"agora/internal/messages"
+	"agora/internal/notifications"
 	"agora/internal/realtime"
 	"agora/internal/servers"
 	"agora/internal/unread"
@@ -31,7 +32,8 @@ type App struct {
 	voiceHub *voice.Hub
 	voice    *voice.Handler
 
-	unread *unread.Handler
+	unread        *unread.Handler
+	notifications *notifications.Handler
 }
 
 func NewApp() (*App, error) {
@@ -55,6 +57,7 @@ func NewApp() (*App, error) {
 	messageRepo := messages.NewRepository(db)
 	usersRepo := users.NewRepository(db)
 	unreadRepo := unread.NewRepository(db)
+	notificationsRepo := notifications.NewRepository(db)
 
 	app := &App{
 		db:     db,
@@ -76,6 +79,7 @@ func NewApp() (*App, error) {
 			unreadRepo,
 			hub,
 			userHub,
+			notificationsRepo,
 		),
 
 		textHub: hub,
@@ -91,6 +95,10 @@ func NewApp() (*App, error) {
 			unreadRepo,
 			channelRepo,
 			serverRepo,
+		),
+
+		notifications: notifications.NewHandler(
+			notificationsRepo,
 		),
 	}
 
@@ -263,5 +271,14 @@ func (app *App) RegisterRoutes() {
 	app.router.HandleFunc(
 		"PUT /api/channels/{channelID}/read",
 		app.users.RequireAuth(app.unread.MarkChannelRead),
+	)
+
+	//notifs
+
+	app.router.HandleFunc(
+		"GET /api/notifications",
+		app.users.RequireAuth(
+			app.notifications.GetNotifications,
+		),
 	)
 }

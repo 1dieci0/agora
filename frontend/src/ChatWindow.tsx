@@ -42,6 +42,10 @@ function ChatWindow({
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const messageInputRef = useRef<HTMLTextAreaElement | null>(null);
 
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null);
+  const [mentionStart, setMentionStart] = useState<number | null>(null);
+  const [selectedMentionIndex, setSelectedMentionIndex] = useState(0);
+
 
   useEffect(() => {
     if (!realtimeEvent || !channel) return;
@@ -95,6 +99,7 @@ function ChatWindow({
 
 
   useEffect(() => {
+
     if (channel === null) {
       setMessages([]);
       return;
@@ -144,6 +149,7 @@ function ChatWindow({
     event: ChangeEvent<HTMLTextAreaElement>,
   ) {
     const textarea = event.currentTarget;
+    const value = textarea.value;
 
     textarea.style.height = "auto";
 
@@ -154,7 +160,25 @@ function ChatWindow({
       maxHeight,
     )}px`;
 
-    setContent(textarea.value);
+    setContent(value);
+
+    const cursorPosition = textarea.selectionStart;
+    const textBeforeCursor = value.slice(0, cursorPosition);
+
+    const match = textBeforeCursor.match(/(?:^|\s)@([a-zA-Z0-9_]*)$/);
+
+    if (!match) {
+      setMentionQuery(null);
+      setMentionStart(null);
+      setSelectedMentionIndex(0);
+      return;
+    }
+
+    const query = match[1];
+
+    setMentionQuery(query);
+    setMentionStart(cursorPosition - query.length - 1);
+    setSelectedMentionIndex(0);
   }
 
 
@@ -230,7 +254,16 @@ function ChatWindow({
     }
   }
 
-
+  const mentionMembers =
+    mentionQuery === null
+      ? []
+      : members
+          .filter((member) =>
+            member.username
+              .toLowerCase()
+              .startsWith(mentionQuery.toLowerCase()),
+          )
+          .slice(0, 5);
 
   if (channel === null) {
     return (
@@ -351,29 +384,163 @@ function ChatWindow({
       </div>
 
       <form className="message-form" onSubmit={handleSubmit}>
+        <div className="message-input-wrapper">
+          {mentionQuery !== null && mentionMembers.length > 0 && (
+            <div className="mention-autocomplete">
+              {mentionMembers.map((member, index) => (
+                <button
+                  key={member.id}
+                  className={
+                    index === selectedMentionIndex
+                      ? "selected"
+                      : ""
+                  }
+                  type="button"
+                  onMouseDown={(event) => {
+                    event.preventDefault();
 
-        <textarea
-          ref={messageInputRef}
-          placeholder={`Message #${channel.name}`}
-          value={content}
-          onChange={handleContentChange}
-          disabled={loading}
-          rows={1}
-          onKeyDown={(event) => {
-            if (event.key === "Enter" && !event.shiftKey) {
-              event.preventDefault();
+                    if (mentionStart === null) {
+                      return;
+                    }
 
-              if (!content.trim() || loading) {
-                return;
+                    const textarea = messageInputRef.current;
+
+                    if (!textarea) {
+                      return;
+                    }
+
+                    const cursorPosition = textarea.selectionStart;
+
+                    const beforeMention = content.slice(0, mentionStart);
+                    const afterMention = content.slice(cursorPosition);
+
+                    const newContent =
+                      `${beforeMention}@${member.username} ${afterMention}`;
+
+                    setContent(newContent);
+                    setMentionQuery(null);
+                    setMentionStart(null);
+
+                    requestAnimationFrame(() => {
+                      const newCursorPosition =
+                        beforeMention.length +
+                        member.username.length +
+                        2;
+
+                      textarea.focus();
+                      textarea.setSelectionRange(
+                        newCursorPosition,
+                        newCursorPosition,
+                      );
+                    });
+                  }}
+                >
+                  @{member.username}
+                </button>
+              ))}
+            </div>
+          )}
+
+          <textarea
+            ref={messageInputRef}
+            placeholder={`Message #${channel.name}`}
+            value={content}
+            onChange={handleContentChange}
+            disabled={loading}
+            rows={1}
+            onKeyDown={(event) => {
+              if (
+                mentionQuery !== null &&
+                mentionMembers.length > 0
+              ) {
+                if (event.key === "ArrowDown") {
+                  event.preventDefault();
+
+                  setSelectedMentionIndex((current) =>
+                    current < mentionMembers.length - 1
+                      ? current + 1
+                      : 0,
+                  );
+
+                  return;
+                }
+
+                if (event.key === "ArrowUp") {
+                  event.preventDefault();
+
+                  setSelectedMentionIndex((current) =>
+                    current > 0
+                      ? current - 1
+                      : mentionMembers.length - 1,
+                  );
+
+                  return;
+                }
+
+                if (event.key === "Escape") {
+                  event.preventDefault();
+
+                  setMentionQuery(null);
+                  setMentionStart(null);
+                  setSelectedMentionIndex(0);
+
+                  return;
+                }
+
+                if (event.key === "Enter" && !event.shiftKey) {
+                  event.preventDefault();
+
+                  const member = mentionMembers[selectedMentionIndex];
+
+                  if (member && mentionStart !== null) {
+                    const textarea = messageInputRef.current;
+
+                    if (textarea) {
+                      const cursorPosition = textarea.selectionStart;
+
+                      const beforeMention = content.slice(0, mentionStart);
+                      const afterMention = content.slice(cursorPosition);
+
+                      const newContent =
+                        `${beforeMention}@${member.username} ${afterMention}`;
+
+                      setContent(newContent);
+                      setMentionQuery(null);
+                      setMentionStart(null);
+                      setSelectedMentionIndex(0);
+
+                      requestAnimationFrame(() => {
+                        const newCursorPosition =
+                          beforeMention.length +
+                          member.username.length +
+                          2;
+
+                        textarea.focus();
+
+                        textarea.setSelectionRange(
+                          newCursorPosition,
+                          newCursorPosition,
+                        );
+                      });
+                    }
+                  }
+
+                  return;
+                }
               }
 
-              event.currentTarget.form?.requestSubmit();
-            }
-          }}
-        />
+              if (event.key === "Enter" && !event.shiftKey) {
+                event.preventDefault();
 
+                if (!content.trim() || loading) {
+                  return;
+                }
 
-
+                event.currentTarget.form?.requestSubmit();
+              }
+            }}
+          />
+        </div>
 
         <button
           type="submit"

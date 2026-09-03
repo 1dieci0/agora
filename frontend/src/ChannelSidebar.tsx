@@ -1,5 +1,5 @@
 import { API_URL, type ChannelUnread } from "./api";
-import type { Channel, VoiceParticipant} from "./types";
+import type { AppNotification, Channel, VoiceParticipant} from "./types";
 import VoiceChannel from "./VoiceChannel";
 
 
@@ -20,6 +20,7 @@ type ChannelSidebarProps = {
   onJoinVoiceChannel: (channelId: number) => void;
   voiceParticipants: VoiceParticipant[];
   unreadChannels: Record<number, ChannelUnread>;
+  notifications: AppNotification[];
 };
 
 function ChannelSidebar({
@@ -33,6 +34,7 @@ function ChannelSidebar({
   onJoinVoiceChannel,
   voiceParticipants,
   unreadChannels,
+  notifications,
 }: ChannelSidebarProps) {
   const textChannels = channels.filter(
     (channel) => channel.type === "text",
@@ -71,33 +73,51 @@ function ChannelSidebar({
             TEXT CHANNELS
           </div>
 
-          {textChannels.map((channel) => (
-            <button
-              key={channel.id}
-              className={
-                channel.id === selectedChannelId
-                  ? "channel-button selected"
-                  : "channel-button"
-              }
-              onClick={() =>
-                onSelectChannel(channel.id)
-              }
-            >
-              <span className="channel-icon">
-                #
-              </span>
+          {textChannels.map((channel) => {
+            const hasUnread = Boolean(
+              unreadChannels[channel.id],
+            );
 
-              <span className="channel-name">
-                {channel.name}
-              </span>
+            const mentionCount = notifications.filter(
+              (notification) =>
+                notification.channel_id === channel.id &&
+                !notification.read,
+            ).length;
 
-              {unreadChannels[channel.id] && (
-                <span className="channel-unread">
-                  {unreadChannels[channel.id].unread_count}
+            const isSelected =
+              channel.id === selectedChannelId;
+
+            return (
+              <button
+                key={channel.id}
+                className={[
+                  "channel-button",
+                  isSelected ? "selected" : "",
+                  hasUnread ? "has-unread" : "",
+                  mentionCount > 0 ? "has-mention" : "",
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
+                onClick={() =>
+                  onSelectChannel(channel.id)
+                }
+              >
+                <span className="channel-icon">
+                  #
                 </span>
-              )}
-            </button>
-          ))}
+
+                <span className="channel-name">
+                  {channel.name}
+                </span>
+
+                {mentionCount > 0 && (
+                  <span className="channel-mention-badge">
+                    {mentionCount}
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </div>
 
         {/* Voice channels */}

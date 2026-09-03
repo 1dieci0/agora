@@ -1,4 +1,4 @@
-import type { Channel, Message, Server, User, Member } from "./types";
+import type { Channel, Message, Server, User, Member, AppNotification } from "./types";
 
 export const API_URL = "http://localhost:8080";
 
@@ -423,4 +423,23 @@ export async function markChannelRead(
       `Could not mark channel as read (${response.status})`,
     );
   }
+}
+
+export async function getNotifications(): Promise<
+  AppNotification[]
+> {
+  const response = await fetch(
+    `${API_URL}/api/notifications`,
+    {
+      credentials: "include",
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      `HTTP ${response.status}`,
+    );
+  }
+
+  return response.json();
 }

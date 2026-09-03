@@ -88,6 +88,16 @@ export type RealtimeEvent =
       data: UnreadUpdate;
     }
   | {
+      type: "mention";
+      data: {
+        id: number;
+        server_id: number;
+        channel_id: number;
+        message_id: number;
+        from_user_id: number;
+      };
+    }
+  | {
       type: "message_deleted";
       data: {
         id: number;
@@ -98,3 +108,17 @@ export type RealtimeEvent =
       type: "user_updated";
       data: User;
     };
+
+
+
+export type AppNotification = {
+  id: number;
+  user_id: number;
+  type: string;
+  server_id: number | null;
+  channel_id: number | null;
+  message_id: number | null;
+  from_user_id: number | null;
+  read: boolean;
+  created_at: string;
+};
