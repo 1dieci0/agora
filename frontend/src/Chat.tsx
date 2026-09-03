@@ -39,6 +39,7 @@ import MembersSidebar from "./MembersSidebar";
 import UserPanel from "./UserPanel";
 import ProfileModal from "./ProfileModal";
 import VoiceConnection from "./VoiceConnection";
+import UserProfilePopover from "./UserProfilePopover";
 
 
 type ChatProps = {
@@ -59,6 +60,9 @@ function Chat({ user, onLogout, onUserUpdate }: ChatProps) {
   const [showJoinServer, setShowJoinServer] = useState(false);
   const [members, setMembers] = useState<Member[]>([]);
   const [showProfile, setShowProfile] = useState(false);
+
+  const [profileUser, setProfileUser] =
+    useState<Member | null>(null);
   
   const [realtimeMessageEvent, setRealtimeMessageEvent] =
     useState<RealtimeEvent | null>(null);
@@ -1057,12 +1061,8 @@ function Chat({ user, onLogout, onUserUpdate }: ChatProps) {
         {selectedServerId !== null && (
           <ChannelSidebar
             channels={channels}
-            selectedChannelId={
-              selectedChannelId
-            }
-            onSelectChannel={
-              handleSelectChannel
-            }
+            selectedChannelId={selectedChannelId}
+            onSelectChannel={handleSelectChannel}
             onCreateChannel={() =>
               setShowCreateChannel(true)
             }
@@ -1079,6 +1079,15 @@ function Chat({ user, onLogout, onUserUpdate }: ChatProps) {
             voiceParticipants={
               voiceParticipants
             }
+            onUserClick={(userId) => {
+              const member = members.find(
+                (member) => member.id === userId,
+              );
+
+              if (member) {
+                setProfileUser(member);
+              }
+            }}
             unreadChannels={unreadChannels}
             notifications={notifications}
           />
@@ -1105,10 +1114,21 @@ function Chat({ user, onLogout, onUserUpdate }: ChatProps) {
         onLatestMessage={handleLatestMessage}
         highlightedMessageId={highlightedMessageId}
         onClearHighlight={() => setHighlightedMessageId(null)}
+          onUserClick={(member) =>
+          setProfileUser(member)
+        }
       />
 
       <MembersSidebar
         members={members}
+        onMemberClick={(member) =>
+          setProfileUser(member)
+        }
+      />
+
+      <UserProfilePopover
+        user={profileUser}
+        onClose={() => setProfileUser(null)}
       />
 
       {showCreateServer && (

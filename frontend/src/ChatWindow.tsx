@@ -22,12 +22,15 @@ type ChatWindowProps = {
   onLatestMessage: (channelID: number, messageID: number) => void;
   highlightedMessageId: number | null;
   onClearHighlight: () => void;
+  onUserClick: (member: Member) => void;
 };
 
 
 function renderMessageContent(
   content: string,
   username: string,
+  members: Member[],
+  onUserClick: (member: Member) => void,
 ) {
   const parts = content.split(
     /(@[a-zA-Z0-9_]+)/g,
@@ -38,16 +41,21 @@ function renderMessageContent(
       part.toLowerCase() ===
       `@${username.toLowerCase()}`
     ) {
+      const mentionedMember = members.find(
+        (member) =>
+          member.username.toLowerCase() ===
+          username.toLowerCase(),
+      );
+
       return (
         <button
           key={index}
           type="button"
           className="message-mention self"
           onClick={() => {
-            console.log(
-              "Clicked mention:",
-              part,
-            );
+            if (mentionedMember) {
+              onUserClick(mentionedMember);
+            }
           }}
         >
           {part}
@@ -56,16 +64,24 @@ function renderMessageContent(
     }
 
     if (part.startsWith("@")) {
+      const mentionedUsername =
+        part.slice(1).toLowerCase();
+
+      const mentionedMember = members.find(
+        (member) =>
+          member.username.toLowerCase() ===
+          mentionedUsername,
+      );
+
       return (
         <button
           key={index}
           type="button"
           className="message-mention"
           onClick={() => {
-            console.log(
-              "Clicked mention:",
-              part,
-            );
+            if (mentionedMember) {
+              onUserClick(mentionedMember);
+            }
           }}
         >
           {part}
@@ -85,6 +101,7 @@ function ChatWindow({
   onLatestMessage,
   highlightedMessageId,
   onClearHighlight,
+  onUserClick,
 }: ChatWindowProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [content, setContent] = useState("");
@@ -392,22 +409,38 @@ function ChatWindow({
                   id={`message-${message.id}`}
                   key={message.id}
                 >
-               <div className="message-avatar">
-                  {member?.avatar_url ? (
-                    <img
-                      src={`${API_URL}${member.avatar_url}`}
-                      alt=""
-                    />
-                  ) : (
-                    message.username.charAt(0).toUpperCase()
-                  )}
-                </div>
+                  <button
+                    type="button"
+                    className="message-avatar"
+                    onClick={() => {
+                      if (member) {
+                        onUserClick(member);
+                      }
+                    }}
+                  >
+                    {member?.avatar_url ? (
+                      <img
+                        src={`${API_URL}${member.avatar_url}`}
+                        alt=""
+                      />
+                    ) : (
+                      message.username.charAt(0).toUpperCase()
+                    )}
+                  </button>
 
                 <div className="message-body">
                   <div className="message-header">
-                    <span className="message-author">
+                    <button
+                      type="button"
+                      className="message-author"
+                      onClick={() => {
+                        if (member) {
+                          onUserClick(member);
+                        }
+                      }}
+                    >
                       {message.username}
-                    </span>
+                    </button>
 
                     <span className="message-time">
                       {new Date(message.created_at).toLocaleTimeString([], {
@@ -474,6 +507,8 @@ function ChatWindow({
                     {renderMessageContent(
                       message.content,
                       user.username,
+                      members,
+                      onUserClick,
                     )}
                   </div>
                   )}

@@ -21,6 +21,7 @@ type ChannelSidebarProps = {
   voiceParticipants: VoiceParticipant[];
   unreadChannels: Record<number, ChannelUnread>;
   notifications: AppNotification[];
+  onUserClick: (userId: number) => void;
 };
 
 function ChannelSidebar({
@@ -35,6 +36,7 @@ function ChannelSidebar({
   voiceParticipants,
   unreadChannels,
   notifications,
+  onUserClick,
 }: ChannelSidebarProps) {
   const textChannels = channels.filter(
     (channel) => channel.type === "text",
@@ -149,6 +151,7 @@ function ChannelSidebar({
                   .map((participant) => (
                     <div
                       key={participant.id}
+                      onClick={() => onUserClick(participant.id)}
                       className={
                         participant.speaking
                           ? "voice-participant speaking"

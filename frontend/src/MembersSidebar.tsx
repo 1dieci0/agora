@@ -4,10 +4,12 @@ import type { Member } from "./types";
 
 type MembersSidebarProps = {
   members: Member[];
+  onMemberClick: (member: Member) => void;
 };
 
 function MembersSidebar({
   members,
+  onMemberClick,
 }: MembersSidebarProps) {
   const owners = members.filter(
     (member) => member.role === "owner",
@@ -31,6 +33,8 @@ function MembersSidebar({
             <div
               className="member"
               key={member.id}
+              onClick={() => onMemberClick(member)}
+
             >
               <span className="member-avatar">
                 {member.avatar_url ? (
@@ -59,6 +63,7 @@ function MembersSidebar({
             <div
               className="member"
               key={member.id}
+              onClick={() => onMemberClick(member)}
             >
             <span className="member-avatar">
               {member.avatar_url ? (
@@ -87,6 +92,7 @@ function MembersSidebar({
             <div
               className="member"
               key={member.id}
+              onClick={() => onMemberClick(member)}
             >
               <span className="member-avatar">
                 {member.avatar_url ? (

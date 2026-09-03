@@ -2344,3 +2344,170 @@ button:focus-visible {
   border-radius: 3px;
   padding: 0 2px;
 }
+
+.profile-popover-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+}
+
+.profile-popover {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 320px;
+  transform: translate(-50%, -50%);
+  padding: 24px;
+  background: #2b2d31;
+  border-radius: 10px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.45);
+  color: #f2f3f5;
+}
+
+.profile-popover-close {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  border: none;
+  background: transparent;
+  color: #b5bac1;
+  font-size: 24px;
+  cursor: pointer;
+}
+
+.profile-popover-close:hover {
+  color: #ffffff;
+}
+
+.profile-popover-avatar {
+  width: 88px;
+  height: 88px;
+  margin: 0 auto 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: 50%;
+  background: #5865f2;
+  font-size: 36px;
+  font-weight: 700;
+}
+
+.profile-popover-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.profile-popover-username {
+  text-align: center;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.profile-popover-status {
+  margin-top: 4px;
+  text-align: center;
+  color: #57f287;
+  font-size: 13px;
+}
+
+.profile-popover-role {
+  width: fit-content;
+  margin: 12px auto 0;
+  padding: 4px 8px;
+  border-radius: 4px;
+  background: #1e1f22;
+  color: #b5bac1;
+  font-size: 12px;
+  text-transform: capitalize;
+}
+
+.profile-popover-divider {
+  height: 1px;
+  margin: 20px 0;
+  background: #3f4147;
+}
+
+.profile-popover-label {
+  margin-bottom: 8px;
+  color: #b5bac1;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.profile-popover-message {
+  width: 100%;
+  box-sizing: border-box;
+  resize: none;
+  padding: 10px;
+  border: none;
+  border-radius: 6px;
+  outline: none;
+  background: #1e1f22;
+  color: #f2f3f5;
+  font: inherit;
+}
+
+.profile-popover-message::placeholder {
+  color: #6d6f78;
+}
+
+.profile-popover-send {
+  width: 100%;
+  margin-top: 8px;
+  padding: 9px;
+  border: none;
+  border-radius: 6px;
+  background: #5865f2;
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.profile-popover-send:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.member {
+  cursor: pointer;
+}
+
+.member:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.message-avatar {
+  padding: 0;
+  border: none;
+  cursor: pointer;
+  font: inherit;
+}
+
+.message-avatar:hover {
+  opacity: 0.85;
+}
+
+
+.message-author {
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.message-author:hover {
+  text-decoration: underline;
+}
+
+.voice-participant {
+  cursor: pointer;
+}
+
+.voice-participant:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
