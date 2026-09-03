@@ -3,6 +3,7 @@ package channels
 import (
 	"database/sql"
 	"encoding/json"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -120,6 +121,7 @@ func (h *Handler) GetChannels(w http.ResponseWriter, r *http.Request) {
 
 	member, err := h.serverRepo.IsMember(userID, serverID)
 	if err != nil {
+		log.Printf("GetChannels IsMember error: %v", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
@@ -131,6 +133,7 @@ func (h *Handler) GetChannels(w http.ResponseWriter, r *http.Request) {
 
 	channels, err := h.repo.GetByServerID(serverID)
 	if err != nil {
+		log.Printf("GetChannels GetByServerID error: %v", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}

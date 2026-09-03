@@ -12,6 +12,17 @@ func Open() (*sql.DB, error) {
 		return nil, err
 	}
 
+	db.SetMaxOpenConns(1)
+
+	_, err = db.Exec(`
+		PRAGMA journal_mode = WAL;
+		PRAGMA busy_timeout = 5000;
+	`)
+	if err != nil {
+		db.Close()
+		return nil, err
+	}
+
 	err = db.Ping()
 	if err != nil {
 		db.Close()

@@ -12,6 +12,8 @@ import {
   markChannelRead,
   type ChannelUnread,
   getNotifications,
+  markNotificationRead,
+  markChannelNotificationsRead,
 } from "./api";
 
 import type {
@@ -69,6 +71,8 @@ function Chat({ user, onLogout, onUserUpdate }: ChatProps) {
   const [selectedChannelId, setSelectedChannelId] =
     useState<number | null>(null);
 
+  const selectedChannelIdRef = useRef<number | null>(null);
+
   const [activeVoiceChannelId, setActiveVoiceChannelId] =
     useState<number | null>(null);
 
@@ -86,14 +90,53 @@ function Chat({ user, onLogout, onUserUpdate }: ChatProps) {
   const [showNotifications, setShowNotifications] =
     useState(false);
 
-  const [pendingChannelId, setPendingChannelId] =
-    useState<number | null>(null);
+  const pendingChannelIdRef =
+    useRef<number | null>(null);
+
 
   /*
    * The realtime WebSocket for the currently selected server.
    */
   const realtimeSocketRef = useRef<WebSocket | null>(null);
   const userRealtimeSocketRef = useRef<WebSocket | null>(null);
+
+
+  useEffect(() => {
+    selectedChannelIdRef.current = selectedChannelId;
+  }, [selectedChannelId]);
+
+  useEffect(() => {
+    if (selectedChannelId === null) {
+      return;
+    }
+
+    const channelID = selectedChannelId;
+
+    async function markChannelNotificationsAsRead() {
+      try {
+        await markChannelNotificationsRead(channelID);
+
+        setNotifications((current) =>
+          current.map((notification) =>
+            notification.channel_id === channelID &&
+            !notification.read
+              ? {
+                  ...notification,
+                  read: true,
+                }
+              : notification,
+          ),
+        );
+      } catch (error) {
+        console.error(
+          "Could not mark channel notifications as read:",
+          error,
+        );
+      }
+    }
+
+    markChannelNotificationsAsRead();
+  }, [selectedChannelId]);
 
 
   useEffect(() => {
@@ -148,6 +191,9 @@ function Chat({ user, onLogout, onUserUpdate }: ChatProps) {
         case "mention": {
           const mention = message.data;
 
+          const isCurrentChannel =
+            selectedChannelIdRef.current === mention.channel_id;
+
           const notification: AppNotification = {
             id: mention.id,
             user_id: user.id,
@@ -156,7 +202,7 @@ function Chat({ user, onLogout, onUserUpdate }: ChatProps) {
             channel_id: mention.channel_id,
             message_id: mention.message_id,
             from_user_id: mention.from_user_id,
-            read: false,
+            read: isCurrentChannel,
             created_at: new Date().toISOString(),
           };
 
@@ -164,6 +210,15 @@ function Chat({ user, onLogout, onUserUpdate }: ChatProps) {
             notification,
             ...current,
           ]);
+
+          if (isCurrentChannel) {
+            markNotificationRead(mention.id).catch((error) => {
+              console.error(
+                "Could not mark mention notification as read:",
+                error,
+              );
+            });
+          }
 
           break;
         }
@@ -293,32 +348,40 @@ function Chat({ user, onLogout, onUserUpdate }: ChatProps) {
 
         setChannels(channels);
 
-        if (channels.length > 0) {
-          const pendingChannelExists =
-            pendingChannelId !== null &&
-            channels.some(
-              (channel) =>
-                channel.id === pendingChannelId,
-            );
-
-          if (pendingChannelExists) {
-            setSelectedChannelId(pendingChannelId);
-            setPendingChannelId(null);
-          } else {
-            setSelectedChannelId(channels[0].id);
-          }
-        } else {
+        if (channels.length === 0) {
           setSelectedChannelId(null);
+          return;
+        }
+
+        const pendingChannelId =
+          pendingChannelIdRef.current;
+
+        const pendingChannelExists =
+          pendingChannelId !== null &&
+          channels.some(
+            (channel) =>
+              channel.id === pendingChannelId,
+          );
+
+        if (pendingChannelExists) {
+          setSelectedChannelId(pendingChannelId);
+          pendingChannelIdRef.current = null;
+        } else {
+          setSelectedChannelId(channels[0].id);
         }
       } catch (error) {
-        console.error("Could not load channels:", error);
+        console.error(
+          "Could not load channels:",
+          error,
+        );
+
         setChannels([]);
         setSelectedChannelId(null);
       }
     }
 
     loadChannels();
-  }, [selectedServerId, pendingChannelId]);
+  }, [selectedServerId]);
 
   /*
    * -------------------------
@@ -680,16 +743,30 @@ function Chat({ user, onLogout, onUserUpdate }: ChatProps) {
 
   //notifs
 
-  function handleNotificationClick(
+  async function handleNotificationClick(
     notification: AppNotification,
   ) {
-    setPendingChannelId(notification.channel_id);
+    if (
+      notification.server_id === null ||
+      notification.channel_id === null
+    ) {
+      return;
+    }
 
-    setSelectedServerId(notification.server_id);
+    if (notification.server_id === selectedServerId) {
+      setSelectedChannelId(notification.channel_id);
+    } else {
+      pendingChannelIdRef.current =
+        notification.channel_id;
+
+      setSelectedServerId(
+        notification.server_id,
+      );
+    }
 
     setShowNotifications(false);
   }
-  
+    
 
   /*
    * -------------------------

@@ -116,3 +116,38 @@ func (r *Repository) GetNotifications(
 
 	return notifications, nil
 }
+
+func (r *Repository) MarkRead(
+	userID int,
+	notificationID int,
+) error {
+	_, err := r.db.Exec(`
+		UPDATE notifications
+		SET read = 1
+		WHERE id = ?
+		  AND user_id = ?
+	`,
+		notificationID,
+		userID,
+	)
+
+	return err
+}
+
+func (r *Repository) MarkChannelRead(
+	userID int,
+	channelID int,
+) error {
+	_, err := r.db.Exec(`
+        UPDATE notifications
+        SET read = 1
+        WHERE user_id = ?
+          AND channel_id = ?
+          AND read = 0
+    `,
+		userID,
+		channelID,
+	)
+
+	return err
+}

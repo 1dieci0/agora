@@ -2,6 +2,7 @@ package unread
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 	"strconv"
 
@@ -147,6 +148,14 @@ func (h *Handler) MarkChannelRead(w http.ResponseWriter, r *http.Request) {
 		channelID,
 		data.MessageID,
 	); err != nil {
+		log.Printf(
+			"Could not mark channel as read: user=%d channel=%d message=%d: %v",
+			userID,
+			channelID,
+			data.MessageID,
+			err,
+		)
+
 		http.Error(
 			w,
 			"Could not mark channel as read",

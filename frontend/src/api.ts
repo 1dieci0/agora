@@ -443,3 +443,37 @@ export async function getNotifications(): Promise<
 
   return response.json();
 }
+
+export async function markNotificationRead(
+  notificationID: number,
+): Promise<void> {
+  const response = await fetch(
+    `${API_URL}/api/notifications/${notificationID}/read`,
+    {
+      method: "POST",
+      credentials: "include",
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      `HTTP ${response.status}`,
+    );
+  }
+}
+
+export async function markChannelNotificationsRead(
+  channelID: number,
+): Promise<void> {
+  const response = await fetch(
+    `${API_URL}/api/notifications/channel/${channelID}/read`,
+    {
+      method: "POST",
+      credentials: "include",
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`);
+  }
+}

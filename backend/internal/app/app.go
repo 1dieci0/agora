@@ -281,4 +281,18 @@ func (app *App) RegisterRoutes() {
 			app.notifications.GetNotifications,
 		),
 	)
+
+	app.router.HandleFunc(
+		"POST /api/notifications/{id}/read",
+		app.users.RequireAuth(
+			app.notifications.MarkRead,
+		),
+	)
+
+	app.router.HandleFunc(
+		"POST /api/notifications/channel/{id}/read",
+		app.users.RequireAuth(
+			app.notifications.MarkChannelRead,
+		),
+	)
 }

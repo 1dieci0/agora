@@ -311,7 +311,18 @@ func (h *Handler) GetMessages(w http.ResponseWriter, r *http.Request) {
 
 	messages, err := h.repo.GetByChannelID(channelID)
 	if err != nil {
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		log.Printf(
+			"Could not get messages: user=%d channel=%d: %v",
+			userID,
+			channelID,
+			err,
+		)
+
+		http.Error(
+			w,
+			"Internal server error",
+			http.StatusInternalServerError,
+		)
 		return
 	}
 

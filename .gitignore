@@ -24,6 +24,8 @@ backend/.env.*
 
 # SQLite / local database files
 backend/*.db
+backend/*.db-shm
+backend/*.db-wal
 backend/*.sqlite
 backend/*.sqlite3
 
