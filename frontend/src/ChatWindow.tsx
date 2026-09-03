@@ -24,6 +24,59 @@ type ChatWindowProps = {
   onClearHighlight: () => void;
 };
 
+
+function renderMessageContent(
+  content: string,
+  username: string,
+) {
+  const parts = content.split(
+    /(@[a-zA-Z0-9_]+)/g,
+  );
+
+  return parts.map((part, index) => {
+    if (
+      part.toLowerCase() ===
+      `@${username.toLowerCase()}`
+    ) {
+      return (
+        <button
+          key={index}
+          type="button"
+          className="message-mention self"
+          onClick={() => {
+            console.log(
+              "Clicked mention:",
+              part,
+            );
+          }}
+        >
+          {part}
+        </button>
+      );
+    }
+
+    if (part.startsWith("@")) {
+      return (
+        <button
+          key={index}
+          type="button"
+          className="message-mention"
+          onClick={() => {
+            console.log(
+              "Clicked mention:",
+              part,
+            );
+          }}
+        >
+          {part}
+        </button>
+      );
+    }
+
+    return <span key={index}>{part}</span>;
+  });
+}
+
 function ChatWindow({
   user,
   channel,
@@ -417,9 +470,12 @@ function ChatWindow({
                       </div>
                     </div>
                   ) : (
-                    <div className="message-content">
-                      {message.content}
-                    </div>
+                  <div className="message-content">
+                    {renderMessageContent(
+                      message.content,
+                      user.username,
+                    )}
+                  </div>
                   )}
                 </div>
             </div>

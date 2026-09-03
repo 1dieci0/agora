@@ -2322,3 +2322,25 @@ button:focus-visible {
   border-left: 3px solid #ed4245;
   border-radius: 6px;
 }
+
+.message-mention {
+  display: inline;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: #5865f2;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.message-mention:hover {
+  text-decoration: underline;
+}
+
+.message-mention.self {
+  color: #ffffff;
+  background: rgba(237, 66, 69, 0.2);
+  border-radius: 3px;
+  padding: 0 2px;
+}
