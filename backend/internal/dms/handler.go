@@ -1,6 +1,7 @@
 package dms
 
 import (
+	"agora/internal/realtime"
 	"agora/internal/users"
 	"encoding/json"
 	"errors"
@@ -11,11 +12,16 @@ import (
 
 type Handler struct {
 	repo *Repository
+	hub  *realtime.UserHub
 }
 
-func NewHandler(repo *Repository) *Handler {
+func NewHandler(
+	repo *Repository,
+	hub *realtime.UserHub,
+) *Handler {
 	return &Handler{
 		repo: repo,
+		hub:  hub,
 	}
 }
 
@@ -171,6 +177,34 @@ func (h *Handler) CreateMessage(w http.ResponseWriter, r *http.Request) {
 		)
 		return
 	}
+
+	otherUserID, err := h.repo.GetOtherUser(
+		conversationID,
+		userID,
+	)
+	if err != nil {
+		http.Error(
+			w,
+			"Could not get conversation recipient",
+			http.StatusInternalServerError,
+		)
+		return
+	}
+
+	event, err := json.Marshal(map[string]interface{}{
+		"type": "dm_created",
+		"data": message,
+	})
+	if err != nil {
+		http.Error(
+			w,
+			"Could not create realtime event",
+			http.StatusInternalServerError,
+		)
+		return
+	}
+
+	h.hub.SendToUser(otherUserID, event)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)

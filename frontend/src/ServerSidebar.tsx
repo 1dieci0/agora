@@ -10,6 +10,7 @@ type ServerSidebarProps = {
   onOpenDMs: () => void;
   unreadServerIds: Set<number>;
   notifications: AppNotification[];
+  showDMs: boolean;
 };
 
 
@@ -24,13 +25,19 @@ function ServerSidebar({
   onOpenDMs,
   unreadServerIds,
   notifications,
+  showDMs,
 }: ServerSidebarProps) {
   return (
     <aside className="server-sidebar">
 
       <button
         type="button"
-        className="dm-home-button"
+        className={[
+          "dm-home-button",
+          showDMs ? "selected" : "",
+        ]
+          .filter(Boolean)
+          .join(" ")}
         onClick={onOpenDMs}
       >
         @
@@ -50,6 +57,7 @@ function ServerSidebar({
               key={server.id}
               className={[
                 "server-button",
+                !showDMs &&
                 server.id === selectedServerId
                   ? "selected"
                   : "",

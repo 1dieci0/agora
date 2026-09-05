@@ -2841,3 +2841,8 @@ button:focus-visible {
 .dm-window-empty-text {
   color: #949ba4;
 }
+
+.dm-home-button.selected {
+  border-radius: 12px;
+  background: #5865f2;
+}

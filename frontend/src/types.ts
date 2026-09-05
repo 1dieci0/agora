@@ -105,6 +105,10 @@ export type RealtimeEvent =
       };
     }
   | {
+      type: "dm_created";
+      data: DirectMessage;
+    }
+  | {
       type: "user_updated";
       data: User;
     };

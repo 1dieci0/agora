@@ -105,7 +105,7 @@ func NewApp() (*App, error) {
 			notificationsRepo,
 		),
 
-		dms: dms.NewHandler(dmsRepo),
+		dms: dms.NewHandler(dmsRepo, userHub),
 	}
 
 	app.RegisterRoutes()

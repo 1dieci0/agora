@@ -29,6 +29,7 @@ import type {
   VoiceState,
   AppNotification,
   DMConversation,
+  DirectMessage,
 } from "./types";
 
 import ServerSidebar from "./ServerSidebar";
@@ -80,6 +81,9 @@ function Chat({ user, onLogout, onUserUpdate }: ChatProps) {
     useState<Member | null>(null);
   
   const [realtimeMessageEvent, setRealtimeMessageEvent] =
+    useState<RealtimeEvent | null>(null);
+
+  const [realtimeDMEvent, setRealtimeDMEvent] =
     useState<RealtimeEvent | null>(null);
 
 
@@ -160,6 +164,20 @@ function Chat({ user, onLogout, onUserUpdate }: ChatProps) {
   }, [selectedChannelId]);
 
 
+  const refreshDMs = useCallback(async () => {
+    try {
+      const conversations = await getDMs();
+
+      setDMConversations(conversations ?? []);
+    } catch (error) {
+      console.error(
+        "Could not refresh DMs:",
+        error,
+      );
+    }
+  }, []);
+
+
   useEffect(() => {
     const WS_URL = API_URL.replace(/^http/, "ws");
 
@@ -186,6 +204,12 @@ function Chat({ user, onLogout, onUserUpdate }: ChatProps) {
       );
 
       switch (message.type) {
+        case "dm_created": {
+          setRealtimeDMEvent(message);
+          refreshDMs();
+          break;
+        }
+        
         case "unread_update": {
           const update = message.data;
 
@@ -280,26 +304,11 @@ function Chat({ user, onLogout, onUserUpdate }: ChatProps) {
         userRealtimeSocketRef.current = null;
       }
     };
-  }, [user.id]);
+  }, [user.id, refreshDMs]);
 
   useEffect(() => {
-    async function loadDMs() {
-      try {
-        const conversations = await getDMs();
-
-        setDMConversations(conversations ?? []);
-      } catch (error) {
-        console.error(
-          "Could not load DMs:",
-          error,
-        );
-
-        setDMConversations([]);
-      }
-    }
-
-    loadDMs();
-  }, []);
+    refreshDMs();
+  }, [refreshDMs]);
 
   useEffect(() => {
     async function loadUnread() {
@@ -1107,6 +1116,7 @@ function Chat({ user, onLogout, onUserUpdate }: ChatProps) {
           setShowDMs(false);
           handleSelectServer(serverID)
         }}
+        showDMs={showDMs}
         onLogout={onLogout}
         onCreateServer={() =>
           setShowCreateServer(true)
@@ -1221,6 +1231,7 @@ function Chat({ user, onLogout, onUserUpdate }: ChatProps) {
             ) ?? null
           }
           conversationId={selectedDMConversationId}
+          realtimeDMEvent={realtimeDMEvent}
         />
       ) : (
         <ChatWindow

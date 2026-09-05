@@ -9,6 +9,7 @@ import {
 import type {
   DMConversation,
   DirectMessage,
+  RealtimeEvent,
   User,
 } from "./types";
 
@@ -16,12 +17,14 @@ type DMWindowProps = {
   user: User | null;
   conversation: DMConversation | null;
   conversationId: number | null;
+  realtimeDMEvent: RealtimeEvent | null;
 };
 
 function DMWindow({
   user,
   conversation,
   conversationId,
+  realtimeDMEvent,
 }: DMWindowProps) {
   const [messages, setMessages] = useState<DirectMessage[]>(
     [],
@@ -109,6 +112,33 @@ function DMWindow({
       setSending(false);
     }
   }
+  
+  useEffect(() => {
+  if (
+    !realtimeDMEvent ||
+    realtimeDMEvent.type !== "dm_created"
+  ) {
+    return;
+  }
+
+  const message = realtimeDMEvent.data;
+
+  if (message.conversation_id !== conversationId) {
+    return;
+  }
+
+  setMessages((current) => {
+    if (
+      current.some(
+        (existing) => existing.id === message.id,
+      )
+    ) {
+      return current;
+    }
+
+    return [...current, message];
+  });
+}, [realtimeDMEvent, conversationId]);
 
   function handleKeyDown(
     event: React.KeyboardEvent<HTMLTextAreaElement>,
