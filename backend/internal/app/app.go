@@ -6,6 +6,7 @@ import (
 
 	"agora/internal/channels"
 	"agora/internal/database"
+	"agora/internal/dms"
 	"agora/internal/messages"
 	"agora/internal/notifications"
 	"agora/internal/realtime"
@@ -34,6 +35,8 @@ type App struct {
 
 	unread        *unread.Handler
 	notifications *notifications.Handler
+
+	dms *dms.Handler
 }
 
 func NewApp() (*App, error) {
@@ -58,6 +61,7 @@ func NewApp() (*App, error) {
 	usersRepo := users.NewRepository(db)
 	unreadRepo := unread.NewRepository(db)
 	notificationsRepo := notifications.NewRepository(db)
+	dmsRepo := dms.NewRepository(db)
 
 	app := &App{
 		db:     db,
@@ -100,6 +104,8 @@ func NewApp() (*App, error) {
 		notifications: notifications.NewHandler(
 			notificationsRepo,
 		),
+
+		dms: dms.NewHandler(dmsRepo),
 	}
 
 	app.RegisterRoutes()
@@ -294,5 +300,27 @@ func (app *App) RegisterRoutes() {
 		app.users.RequireAuth(
 			app.notifications.MarkChannelRead,
 		),
+	)
+
+	// DMs
+
+	app.router.HandleFunc(
+		"POST /api/dms",
+		app.users.RequireAuth(app.dms.CreateConversation),
+	)
+
+	app.router.HandleFunc(
+		"GET /api/dms",
+		app.users.RequireAuth(app.dms.GetConversations),
+	)
+
+	app.router.HandleFunc(
+		"GET /api/dms/{id}/messages",
+		app.users.RequireAuth(app.dms.GetMessages),
+	)
+
+	app.router.HandleFunc(
+		"POST /api/dms/{id}/messages",
+		app.users.RequireAuth(app.dms.CreateMessage),
 	)
 }

@@ -14,6 +14,8 @@ import {
   getNotifications,
   markNotificationRead,
   markChannelNotificationsRead,
+  getDMs,
+  createDM,
 } from "./api";
 
 import type {
@@ -26,6 +28,7 @@ import type {
   RealtimeEvent,
   VoiceState,
   AppNotification,
+  DMConversation,
 } from "./types";
 
 import ServerSidebar from "./ServerSidebar";
@@ -40,6 +43,8 @@ import UserPanel from "./UserPanel";
 import ProfileModal from "./ProfileModal";
 import VoiceConnection from "./VoiceConnection";
 import UserProfilePopover from "./UserProfilePopover";
+import DMsSidebar from "./DMsSidebar";
+import DMWindow from "./DMWindow";
 
 
 type ChatProps = {
@@ -60,6 +65,16 @@ function Chat({ user, onLogout, onUserUpdate }: ChatProps) {
   const [showJoinServer, setShowJoinServer] = useState(false);
   const [members, setMembers] = useState<Member[]>([]);
   const [showProfile, setShowProfile] = useState(false);
+  const [showUserProfile, setShowUserProfile] =
+    useState(false);
+
+  
+  const [showDMs, setShowDMs] = useState(false);
+  const [dmConversations, setDMConversations] =
+  useState<DMConversation[]>([]);
+
+  const [selectedDMConversationId, setSelectedDMConversationId] =
+    useState<number | null>(null);
 
   const [profileUser, setProfileUser] =
     useState<Member | null>(null);
@@ -266,6 +281,25 @@ function Chat({ user, onLogout, onUserUpdate }: ChatProps) {
       }
     };
   }, [user.id]);
+
+  useEffect(() => {
+    async function loadDMs() {
+      try {
+        const conversations = await getDMs();
+
+        setDMConversations(conversations ?? []);
+      } catch (error) {
+        console.error(
+          "Could not load DMs:",
+          error,
+        );
+
+        setDMConversations([]);
+      }
+    }
+
+    loadDMs();
+  }, []);
 
   useEffect(() => {
     async function loadUnread() {
@@ -777,6 +811,30 @@ function Chat({ user, onLogout, onUserUpdate }: ChatProps) {
 
     setShowNotifications(false);
   }
+
+  //dm
+
+  async function handleSendDM(userID: number) {
+    try {
+      const result = await createDM(userID);
+
+      const conversations = await getDMs();
+
+      setDMConversations(conversations ?? []);
+
+      setSelectedDMConversationId(
+        result.conversation_id,
+      );
+
+    setShowUserProfile(false);
+    setShowDMs(true);
+    } catch (error) {
+      console.error(
+        "Could not open DM:",
+        error,
+      );
+    }
+  }
     
 
   /*
@@ -1045,11 +1103,27 @@ function Chat({ user, onLogout, onUserUpdate }: ChatProps) {
       <ServerSidebar
         servers={servers}
         selectedServerId={selectedServerId}
-        onSelectServer={handleSelectServer}
+        onSelectServer={(serverID) => {
+          setShowDMs(false);
+          handleSelectServer(serverID)
+        }}
         onLogout={onLogout}
         onCreateServer={() =>
           setShowCreateServer(true)
         }
+        onOpenDMs={() => {
+          setShowProfile(false);
+          setShowDMs(true);
+
+          if (
+            selectedDMConversationId === null &&
+            dmConversations.length > 0
+          ) {
+            setSelectedDMConversationId(
+              dmConversations[0].id,
+            );
+          }
+        }}
         onJoinServer={() =>
           setShowJoinServer(true)
         }
@@ -1057,79 +1131,135 @@ function Chat({ user, onLogout, onUserUpdate }: ChatProps) {
         notifications={notifications}
       />
 
-      <div className="channel-area">
-        {selectedServerId !== null && (
-          <ChannelSidebar
-            channels={channels}
-            selectedChannelId={selectedChannelId}
-            onSelectChannel={handleSelectChannel}
-            onCreateChannel={() =>
-              setShowCreateChannel(true)
-            }
-            onInvite={() =>
-              setShowInvite(true)
-            }
-            serverId={selectedServerId}
-            activeVoiceChannelId={
-              activeVoiceChannelId
-            }
-            onJoinVoiceChannel={
-              handleJoinVoiceChannel
-            }
-            voiceParticipants={
-              voiceParticipants
-            }
-            onUserClick={(userId) => {
-              const member = members.find(
-                (member) => member.id === userId,
-              );
-
-              if (member) {
-                setProfileUser(member);
+        {showDMs ? (
+          <div className="channel-area">
+            <DMsSidebar
+              conversations={dmConversations}
+              selectedConversationId={
+                selectedDMConversationId
               }
-            }}
-            unreadChannels={unreadChannels}
-            notifications={notifications}
+              onSelectConversation={
+                setSelectedDMConversationId
+              }
+            />
+
+            <div className="dm-user-panel">
+              <UserPanel
+                user={user}
+                muted={muted}
+                deafened={deafened}
+                onToggleMute={toggleMute}
+                onToggleDeafen={toggleDeafen}
+                onOpenProfile={() =>
+                  setShowProfile(true)
+                }
+                onLogout={onLogout}
+              />
+            </div>
+          </div>
+        ) : (
+        <div className="channel-area">
+          {selectedServerId !== null && (
+            <ChannelSidebar
+              channels={channels}
+              selectedChannelId={selectedChannelId}
+              onSelectChannel={handleSelectChannel}
+              onCreateChannel={() =>
+                setShowCreateChannel(true)
+              }
+              onInvite={() =>
+                setShowInvite(true)
+              }
+              serverId={selectedServerId}
+              activeVoiceChannelId={
+                activeVoiceChannelId
+              }
+              onJoinVoiceChannel={
+                handleJoinVoiceChannel
+              }
+              voiceParticipants={
+                voiceParticipants
+              }
+              onUserClick={(userId) => {
+                const member = members.find(
+                  (member) => member.id === userId,
+                );
+
+                if (member) {
+                  setProfileUser(member);
+                  setShowUserProfile(true);
+                }
+              }}
+              unreadChannels={unreadChannels}
+              notifications={notifications}
+            />
+          )}
+
+          <UserPanel
+            user={user}
+            muted={muted}
+            deafened={deafened}
+            onToggleMute={toggleMute}
+            onToggleDeafen={toggleDeafen}
+            onOpenProfile={() =>
+              setShowProfile(true)
+            }
+            onLogout={onLogout}
           />
-        )}
+        </div>
+      )}
 
-        <UserPanel
+
+      {showDMs ? (
+        <DMWindow
           user={user}
-          muted={muted}
-          deafened={deafened}
-          onToggleMute={toggleMute}
-          onToggleDeafen={toggleDeafen}
-          onOpenProfile={() =>
-            setShowProfile(true)
+          conversation={
+            dmConversations.find(
+              (conversation) =>
+                conversation.id ===
+                selectedDMConversationId,
+            ) ?? null
           }
-          onLogout={onLogout}
+          conversationId={selectedDMConversationId}
         />
-      </div>
+      ) : (
+        <ChatWindow
+          user={user}
+          channel={selectedChannel}
+          members={members}
+          realtimeEvent={realtimeMessageEvent}
+          onLatestMessage={handleLatestMessage}
+          highlightedMessageId={highlightedMessageId}
+          onClearHighlight={() =>
+            setHighlightedMessageId(null)
+          }
+          onUserClick={(member) => {
+            setProfileUser(member);
+            setShowUserProfile(true);
+          }}
+        />
+      )}
 
-      <ChatWindow
-        user={user}
-        channel={selectedChannel}
-        members={members}
-        realtimeEvent={realtimeMessageEvent}
-        onLatestMessage={handleLatestMessage}
-        highlightedMessageId={highlightedMessageId}
-        onClearHighlight={() => setHighlightedMessageId(null)}
-          onUserClick={(member) =>
-          setProfileUser(member)
-        }
-      />
+      {!showDMs && (
+        <MembersSidebar
+          members={members}
+          onMemberClick={(member) => {
+            setProfileUser(member);
+            setShowUserProfile(true);
+          }}
+        />
+      )}
 
-      <MembersSidebar
-        members={members}
-        onMemberClick={(member) =>
-          setProfileUser(member)
-        }
-      />
+      {showUserProfile && (
+        <UserProfilePopover
+          user={profileUser}
+          onClose={() =>
+            setShowUserProfile(false)
+          }
+          onSendMessage={handleSendDM}
+        />
+      )}
 
-      <UserProfilePopover
-        user={profileUser}
-        onClose={() => setProfileUser(null)}
-      />
 
       {showCreateServer && (
         <CreateServerModal

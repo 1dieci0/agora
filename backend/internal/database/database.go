@@ -158,6 +158,51 @@ func SetupDatabase(db *sql.DB) error {
 				ON DELETE CASCADE
 		);
 
+		CREATE TABLE IF NOT EXISTS direct_conversations (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+		);
+
+		CREATE TABLE IF NOT EXISTS direct_conversation_members (
+			conversation_id INTEGER NOT NULL,
+			user_id INTEGER NOT NULL,
+
+			PRIMARY KEY (conversation_id, user_id),
+
+			FOREIGN KEY (conversation_id)
+				REFERENCES direct_conversations(id)
+				ON DELETE CASCADE,
+
+			FOREIGN KEY (user_id)
+				REFERENCES users(id)
+				ON DELETE CASCADE
+		);
+
+		CREATE INDEX IF NOT EXISTS idx_direct_conversation_members_user
+		ON direct_conversation_members(user_id);
+
+		CREATE TABLE IF NOT EXISTS direct_messages (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+			conversation_id INTEGER NOT NULL,
+			user_id INTEGER NOT NULL,
+
+			content TEXT NOT NULL,
+
+			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+			FOREIGN KEY (conversation_id)
+				REFERENCES direct_conversations(id)
+				ON DELETE CASCADE,
+
+			FOREIGN KEY (user_id)
+				REFERENCES users(id)
+				ON DELETE CASCADE
+		);
+
+		CREATE INDEX IF NOT EXISTS idx_direct_messages_conversation
+		ON direct_messages(conversation_id);
+
 	`)
 
 	return err

@@ -122,3 +122,22 @@ export type AppNotification = {
   read: boolean;
   created_at: string;
 };
+
+
+export type DirectMessage = {
+  id: number;
+  conversation_id: number;
+  user_id: number;
+  username: string;
+  avatar_url: string | null;
+  content: string;
+  created_at: string;
+};
+
+export type DMConversation = {
+  id: number;
+  user_id: number;
+  username: string;
+  avatar_url: string | null;
+  created_at: string;
+};

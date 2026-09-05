@@ -69,18 +69,3 @@ function App() {
 export default App;
 
 
-export async function markChannelNotificationsRead(
-  channelID: number,
-): Promise<void> {
-  const response = await fetch(
-    `${API_URL}/api/notifications/channel/${channelID}/read`,
-    {
-      method: "POST",
-      credentials: "include",
-    },
-  );
-
-  if (!response.ok) {
-    throw new Error(`HTTP ${response.status}`);
-  }
-}

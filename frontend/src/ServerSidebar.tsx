@@ -7,6 +7,7 @@ type ServerSidebarProps = {
   onLogout: () => void;
   onCreateServer: () => void;
   onJoinServer: () => void;
+  onOpenDMs: () => void;
   unreadServerIds: Set<number>;
   notifications: AppNotification[];
 };
@@ -20,11 +21,20 @@ function ServerSidebar({
   onLogout,
   onCreateServer,
   onJoinServer,
+  onOpenDMs,
   unreadServerIds,
   notifications,
 }: ServerSidebarProps) {
   return (
     <aside className="server-sidebar">
+
+      <button
+        type="button"
+        className="dm-home-button"
+        onClick={onOpenDMs}
+      >
+        @
+      </button>
       <div className="server-list">
         {servers.map((server) => {
           const hasUnread = unreadServerIds.has(server.id);

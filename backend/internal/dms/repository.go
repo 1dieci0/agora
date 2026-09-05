@@ -20,73 +20,61 @@ func NewRepository(db *sql.DB) *Repository {
 func (r *Repository) GetOrCreateConversation(
 	userID int,
 	otherUserID int,
-) (*Conversation, error) {
+) (int, error) {
 	if userID == otherUserID {
-		return nil, errors.New("cannot create a conversation with yourself")
+		return 0, errors.New("cannot create DM with yourself")
 	}
 
-	/*
-	 * Look for an existing conversation containing
-	 * exactly these two users.
-	 */
 	var conversationID int
-	var createdAt string
 
 	err := r.db.QueryRow(`
-		SELECT
-			c.id,
-			c.created_at
-		FROM dm_conversations c
-		JOIN dm_participants p1
-			ON p1.conversation_id = c.id
-		JOIN dm_participants p2
-			ON p2.conversation_id = c.id
-		WHERE p1.user_id = ?
-		  AND p2.user_id = ?
+		SELECT c.id
+		FROM direct_conversations c
+		JOIN direct_conversation_members m1
+			ON m1.conversation_id = c.id
+		JOIN direct_conversation_members m2
+			ON m2.conversation_id = c.id
+		WHERE m1.user_id = ?
+		  AND m2.user_id = ?
+		  AND (
+			SELECT COUNT(*)
+			FROM direct_conversation_members
+			WHERE conversation_id = c.id
+		  ) = 2
 		LIMIT 1
-	`,
-		userID,
-		otherUserID,
-	).Scan(
-		&conversationID,
-		&createdAt,
-	)
+	`, userID, otherUserID).Scan(&conversationID)
 
 	if err == nil {
-		return r.getConversation(conversationID)
+		return conversationID, nil
 	}
 
 	if !errors.Is(err, sql.ErrNoRows) {
-		return nil, err
+		return 0, err
 	}
 
-	/*
-	 * No conversation exists, so create one.
-	 */
 	tx, err := r.db.Begin()
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
 
 	defer tx.Rollback()
 
 	result, err := tx.Exec(`
-		INSERT INTO dm_conversations DEFAULT VALUES
+		INSERT INTO direct_conversations DEFAULT VALUES
 	`)
-
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
 
 	conversationID64, err := result.LastInsertId()
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
 
 	conversationID = int(conversationID64)
 
 	_, err = tx.Exec(`
-		INSERT INTO dm_participants (
+		INSERT INTO direct_conversation_members (
 			conversation_id,
 			user_id
 		)
@@ -97,108 +85,38 @@ func (r *Repository) GetOrCreateConversation(
 		conversationID,
 		otherUserID,
 	)
-
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
 
 	if err := tx.Commit(); err != nil {
-		return nil, err
+		return 0, err
 	}
 
-	return r.getConversation(conversationID)
+	return conversationID, nil
 }
 
-func (r *Repository) getConversation(
-	conversationID int,
-) (*Conversation, error) {
-	var conversation Conversation
-
-	err := r.db.QueryRow(`
-		SELECT id, created_at
-		FROM dm_conversations
-		WHERE id = ?
-	`,
-		conversationID,
-	).Scan(
-		&conversation.ID,
-		&conversation.CreatedAt,
-	)
-
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, ErrConversationNotFound
-	}
-
-	if err != nil {
-		return nil, err
-	}
-
-	rows, err := r.db.Query(`
-		SELECT
-			u.id,
-			u.username,
-			u.avatar_url
-		FROM dm_participants p
-		JOIN users u
-			ON u.id = p.user_id
-		WHERE p.conversation_id = ?
-		ORDER BY u.id ASC
-	`,
-		conversationID,
-	)
-
-	if err != nil {
-		return nil, err
-	}
-
-	defer rows.Close()
-
-	for rows.Next() {
-		var participant Participant
-
-		err := rows.Scan(
-			&participant.ID,
-			&participant.Username,
-			&participant.AvatarURL,
-		)
-
-		if err != nil {
-			return nil, err
-		}
-
-		conversation.Participants = append(
-			conversation.Participants,
-			participant,
-		)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-
-	return &conversation, nil
-}
-
-func (r *Repository) GetConversationsForUser(
+func (r *Repository) GetConversations(
 	userID int,
 ) ([]Conversation, error) {
 	rows, err := r.db.Query(`
 		SELECT
 			c.id,
+			u.id,
+			u.username,
+			u.avatar_url,
 			c.created_at
-		FROM dm_conversations c
-		JOIN dm_participants p
-			ON p.conversation_id = c.id
-		WHERE p.user_id = ?
-		ORDER BY (
-			SELECT MAX(m.created_at)
-			FROM dm_messages m
-			WHERE m.conversation_id = c.id
-		) DESC,
-		c.created_at DESC
-	`,
-		userID,
-	)
+		FROM direct_conversations c
+		JOIN direct_conversation_members m
+			ON m.conversation_id = c.id
+		JOIN direct_conversation_members other
+			ON other.conversation_id = c.id
+			AND other.user_id != ?
+		JOIN users u
+			ON u.id = other.user_id
+		WHERE m.user_id = ?
+		ORDER BY c.id DESC
+	`, userID, userID)
 
 	if err != nil {
 		return nil, err
@@ -206,31 +124,24 @@ func (r *Repository) GetConversationsForUser(
 
 	defer rows.Close()
 
-	var conversations []Conversation
+	conversations := make([]Conversation, 0)
 
 	for rows.Next() {
 		var conversation Conversation
 
-		err := rows.Scan(
+		if err := rows.Scan(
 			&conversation.ID,
+			&conversation.UserID,
+			&conversation.Username,
+			&conversation.AvatarURL,
 			&conversation.CreatedAt,
-		)
-
-		if err != nil {
-			return nil, err
-		}
-
-		fullConversation, err := r.getConversation(
-			conversation.ID,
-		)
-
-		if err != nil {
+		); err != nil {
 			return nil, err
 		}
 
 		conversations = append(
 			conversations,
-			*fullConversation,
+			conversation,
 		)
 	}
 
@@ -241,7 +152,32 @@ func (r *Repository) GetConversationsForUser(
 	return conversations, nil
 }
 
-func (r *Repository) IsParticipant(
+func (r *Repository) GetOtherUser(
+	conversationID int,
+	userID int,
+) (int, error) {
+	var otherUserID int
+
+	err := r.db.QueryRow(`
+		SELECT user_id
+		FROM direct_conversation_members
+		WHERE conversation_id = ?
+		  AND user_id != ?
+		LIMIT 1
+	`, conversationID, userID).Scan(&otherUserID)
+
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, ErrConversationNotFound
+	}
+
+	if err != nil {
+		return 0, err
+	}
+
+	return otherUserID, nil
+}
+
+func (r *Repository) IsMember(
 	conversationID int,
 	userID int,
 ) (bool, error) {
@@ -249,14 +185,11 @@ func (r *Repository) IsParticipant(
 
 	err := r.db.QueryRow(`
 		SELECT 1
-		FROM dm_participants
+		FROM direct_conversation_members
 		WHERE conversation_id = ?
 		  AND user_id = ?
 		LIMIT 1
-	`,
-		conversationID,
-		userID,
-	).Scan(&exists)
+	`, conversationID, userID).Scan(&exists)
 
 	if errors.Is(err, sql.ErrNoRows) {
 		return false, nil
@@ -271,23 +204,35 @@ func (r *Repository) IsParticipant(
 
 func (r *Repository) GetMessages(
 	conversationID int,
-) ([]Message, error) {
+	userID int,
+) ([]DirectMessage, error) {
+	isMember, err := r.IsMember(
+		conversationID,
+		userID,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	if !isMember {
+		return nil, ErrConversationNotFound
+	}
+
 	rows, err := r.db.Query(`
 		SELECT
 			m.id,
 			m.conversation_id,
 			m.user_id,
 			u.username,
+			u.avatar_url,
 			m.content,
 			m.created_at
-		FROM dm_messages m
+		FROM direct_messages m
 		JOIN users u
 			ON u.id = m.user_id
 		WHERE m.conversation_id = ?
-		ORDER BY m.created_at ASC, m.id ASC
-	`,
-		conversationID,
-	)
+		ORDER BY m.id ASC
+	`, conversationID)
 
 	if err != nil {
 		return nil, err
@@ -295,21 +240,20 @@ func (r *Repository) GetMessages(
 
 	defer rows.Close()
 
-	var messages []Message
+	messages := make([]DirectMessage, 0)
 
 	for rows.Next() {
-		var message Message
+		var message DirectMessage
 
-		err := rows.Scan(
+		if err := rows.Scan(
 			&message.ID,
 			&message.ConversationID,
 			&message.UserID,
 			&message.Username,
+			&message.AvatarURL,
 			&message.Content,
 			&message.CreatedAt,
-		)
-
-		if err != nil {
+		); err != nil {
 			return nil, err
 		}
 
@@ -327,9 +271,21 @@ func (r *Repository) CreateMessage(
 	conversationID int,
 	userID int,
 	content string,
-) (*Message, error) {
+) (DirectMessage, error) {
+	isMember, err := r.IsMember(
+		conversationID,
+		userID,
+	)
+	if err != nil {
+		return DirectMessage{}, err
+	}
+
+	if !isMember {
+		return DirectMessage{}, ErrConversationNotFound
+	}
+
 	result, err := r.db.Exec(`
-		INSERT INTO dm_messages (
+		INSERT INTO direct_messages (
 			conversation_id,
 			user_id,
 			content
@@ -340,17 +296,16 @@ func (r *Repository) CreateMessage(
 		userID,
 		content,
 	)
-
 	if err != nil {
-		return nil, err
+		return DirectMessage{}, err
 	}
 
-	messageID64, err := result.LastInsertId()
+	messageID, err := result.LastInsertId()
 	if err != nil {
-		return nil, err
+		return DirectMessage{}, err
 	}
 
-	var message Message
+	var message DirectMessage
 
 	err = r.db.QueryRow(`
 		SELECT
@@ -358,26 +313,25 @@ func (r *Repository) CreateMessage(
 			m.conversation_id,
 			m.user_id,
 			u.username,
+			u.avatar_url,
 			m.content,
 			m.created_at
-		FROM dm_messages m
+		FROM direct_messages m
 		JOIN users u
 			ON u.id = m.user_id
 		WHERE m.id = ?
-	`,
-		messageID64,
-	).Scan(
+	`, messageID).Scan(
 		&message.ID,
 		&message.ConversationID,
 		&message.UserID,
 		&message.Username,
+		&message.AvatarURL,
 		&message.Content,
 		&message.CreatedAt,
 	)
-
 	if err != nil {
-		return nil, err
+		return DirectMessage{}, err
 	}
 
-	return &message, nil
+	return message, nil
 }

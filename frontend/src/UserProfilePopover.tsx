@@ -4,11 +4,13 @@ import { API_URL } from "./api";
 type UserProfilePopoverProps = {
   user: Member | null;
   onClose: () => void;
+  onSendMessage: (userID: number) => void;
 };
 
 function UserProfilePopover({
   user,
   onClose,
+  onSendMessage,
 }: UserProfilePopoverProps) {
   if (!user) {
     return null;
@@ -54,22 +56,12 @@ function UserProfilePopover({
         <div className="profile-popover-divider" />
 
         <div className="profile-popover-section">
-          <div className="profile-popover-label">
-            Send a message
-          </div>
-
-          <textarea
-            className="profile-popover-message"
-            placeholder={`Message ${user.username}`}
-            rows={3}
-          />
-
           <button
             type="button"
             className="profile-popover-send"
-            disabled
+            onClick={() => onSendMessage(user.id)}
           >
-            Send
+            Send a message
           </button>
         </div>
       </div>

@@ -1,4 +1,4 @@
-import type { Channel, Message, Server, User, Member, AppNotification } from "./types";
+import type { Channel, Message, Server, User, Member, AppNotification, DirectMessage, DMConversation } from "./types";
 
 export const API_URL = "http://localhost:8080";
 
@@ -476,4 +476,81 @@ export async function markChannelNotificationsRead(
   if (!response.ok) {
     throw new Error(`HTTP ${response.status}`);
   }
+}
+
+
+
+export async function createDM(
+  userID: number,
+): Promise<{ conversation_id: number }> {
+  const response = await fetch(`${API_URL}/api/dms`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      user_id: userID,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error("Failed to create DM");
+  }
+
+  return response.json();
+}
+
+export async function getDMs(): Promise<DMConversation[]> {
+  const response = await fetch(`${API_URL}/api/dms`, {
+    credentials: "include",
+  });
+
+  if (!response.ok) {
+    throw new Error("Failed to get DMs");
+  }
+
+  return response.json();
+}
+
+export async function getDMMessages(
+  conversationID: number,
+): Promise<DirectMessage[]> {
+  const response = await fetch(
+    `${API_URL}/api/dms/${conversationID}/messages`,
+    {
+      credentials: "include",
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error("Failed to get DM messages");
+  }
+
+  return response.json();
+}
+
+export async function sendDM(
+  conversationID: number,
+  content: string,
+): Promise<DirectMessage> {
+  const response = await fetch(
+    `${API_URL}/api/dms/${conversationID}/messages`,
+    {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        content,
+      }),
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error("Failed to send DM");
+  }
+
+  return response.json();
 }
