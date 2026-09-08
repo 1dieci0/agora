@@ -105,7 +105,7 @@ func NewApp() (*App, error) {
 			notificationsRepo,
 		),
 
-		dms: dms.NewHandler(dmsRepo, userHub),
+		dms: dms.NewHandler(dmsRepo, userHub, notificationsRepo),
 	}
 
 	app.RegisterRoutes()
@@ -300,6 +300,11 @@ func (app *App) RegisterRoutes() {
 		app.users.RequireAuth(
 			app.notifications.MarkChannelRead,
 		),
+	)
+
+	app.router.HandleFunc(
+		"POST /api/dms/{id}/read",
+		app.users.RequireAuth(app.dms.MarkConversationRead),
 	)
 
 	// DMs

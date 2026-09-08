@@ -5,15 +5,16 @@ import (
 )
 
 type Notification struct {
-	ID         int    `json:"id"`
-	UserID     int    `json:"user_id"`
-	Type       string `json:"type"`
-	ServerID   *int   `json:"server_id"`
-	ChannelID  *int   `json:"channel_id"`
-	MessageID  *int   `json:"message_id"`
-	FromUserID *int   `json:"from_user_id"`
-	Read       bool   `json:"read"`
-	CreatedAt  string `json:"created_at"`
+	ID             int    `json:"id"`
+	UserID         int    `json:"user_id"`
+	Type           string `json:"type"`
+	ServerID       *int   `json:"server_id"`
+	ChannelID      *int   `json:"channel_id"`
+	MessageID      *int   `json:"message_id"`
+	ConversationID *int   `json:"conversation_id"`
+	FromUserID     *int   `json:"from_user_id"`
+	Read           bool   `json:"read"`
+	CreatedAt      string `json:"created_at"`
 }
 
 type Repository struct {
@@ -71,6 +72,7 @@ func (r *Repository) GetNotifications(
 			server_id,
 			channel_id,
 			message_id,
+			conversation_id,
 			from_user_id,
 			read,
 			created_at
@@ -150,4 +152,35 @@ func (r *Repository) MarkChannelRead(
 	)
 
 	return err
+}
+
+func (r *Repository) CreateDMMention(
+	userID int,
+	conversationID int,
+	fromUserID int,
+) (int, error) {
+	result, err := r.db.Exec(`
+		INSERT INTO notifications (
+			user_id,
+			type,
+			conversation_id,
+			from_user_id
+		)
+		VALUES (?, 'mention', ?, ?)
+	`,
+		userID,
+		conversationID,
+		fromUserID,
+	)
+
+	if err != nil {
+		return 0, err
+	}
+
+	id, err := result.LastInsertId()
+	if err != nil {
+		return 0, err
+	}
+
+	return int(id), nil
 }

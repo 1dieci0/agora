@@ -16,6 +16,7 @@ import {
   markChannelNotificationsRead,
   getDMs,
   createDM,
+  markDMConversationRead,
 } from "./api";
 
 import type {
@@ -118,6 +119,16 @@ function Chat({ user, onLogout, onUserUpdate }: ChatProps) {
 
   const [highlightedMessageId, setHighlightedMessageId] =
     useState<number | null>(null);
+
+  const hasUnreadDMs = dmConversations.some(
+    (conversation) => conversation.unread_count > 0,
+  );
+
+  const dmMentionCount = dmConversations.reduce(
+    (total, conversation) =>
+      total + conversation.mention_count,
+    0,
+  );
 
 
   /*
@@ -233,6 +244,22 @@ function Chat({ user, onLogout, onUserUpdate }: ChatProps) {
           break;
         }
 
+        case "notification": {
+          const notification = message.data;
+
+          const newNotification: AppNotification = {
+            ...notification,
+            created_at: new Date().toISOString(),
+          };
+
+          setNotifications((current) => [
+            newNotification,
+            ...current,
+          ]);
+
+          break;
+        }
+
         case "mention": {
           const mention = message.data;
 
@@ -246,6 +273,7 @@ function Chat({ user, onLogout, onUserUpdate }: ChatProps) {
             server_id: mention.server_id,
             channel_id: mention.channel_id,
             message_id: mention.message_id,
+            conversation_id: null,
             from_user_id: mention.from_user_id,
             read: isCurrentChannel,
             created_at: new Date().toISOString(),
@@ -681,7 +709,39 @@ function Chat({ user, onLogout, onUserUpdate }: ChatProps) {
     },
     [],
   );
-  
+
+  const handleDMConversationRead = useCallback(
+    async (messageId: number) => {
+      if (selectedDMConversationId === null) {
+        return;
+      }
+
+      try {
+        await markDMConversationRead(
+          selectedDMConversationId,
+          messageId,
+        );
+
+        setDMConversations((current) =>
+          current.map((conversation) =>
+            conversation.id === selectedDMConversationId
+              ? {
+                  ...conversation,
+                  unread_count: 0,
+                }
+              : conversation,
+          ),
+        );
+      } catch (error) {
+        console.error(
+          "Could not mark DM as read:",
+          error,
+        );
+      }
+    },
+    [selectedDMConversationId],
+  );
+    
   function handleUserUpdate(updatedUser: User) {
     // Update the user in App.tsx
     onUserUpdate(updatedUser);
@@ -1114,7 +1174,7 @@ function Chat({ user, onLogout, onUserUpdate }: ChatProps) {
         selectedServerId={selectedServerId}
         onSelectServer={(serverID) => {
           setShowDMs(false);
-          handleSelectServer(serverID)
+          handleSelectServer(serverID);
         }}
         showDMs={showDMs}
         onLogout={onLogout}
@@ -1139,6 +1199,8 @@ function Chat({ user, onLogout, onUserUpdate }: ChatProps) {
         }
         unreadServerIds={unreadServerIds}
         notifications={notifications}
+        hasUnreadDMs={hasUnreadDMs}
+        dmMentionCount={dmMentionCount}
       />
 
         {showDMs ? (
@@ -1226,12 +1288,12 @@ function Chat({ user, onLogout, onUserUpdate }: ChatProps) {
           conversation={
             dmConversations.find(
               (conversation) =>
-                conversation.id ===
-                selectedDMConversationId,
+                conversation.id === selectedDMConversationId,
             ) ?? null
           }
           conversationId={selectedDMConversationId}
           realtimeDMEvent={realtimeDMEvent}
+          onConversationRead={handleDMConversationRead}
         />
       ) : (
         <ChatWindow

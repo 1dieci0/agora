@@ -2846,3 +2846,18 @@ button:focus-visible {
   border-radius: 12px;
   background: #5865f2;
 }
+
+.dm-unread-badge {
+  margin-left: auto;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  background: #ed4245;
+  color: white;
+}

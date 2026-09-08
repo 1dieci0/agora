@@ -554,3 +554,29 @@ export async function sendDM(
 
   return response.json();
 }
+
+
+export async function markDMConversationRead(
+  conversationId: number,
+  messageId: number,
+) {
+  const response = await fetch(
+    `${API_URL}/api/dms/${conversationId}/read`,
+    {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        message_id: messageId,
+      }),
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      `Could not mark DM as read: ${response.status}`,
+    );
+  }
+}

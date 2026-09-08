@@ -96,32 +96,72 @@ func (r *Repository) GetOrCreateConversation(
 	return conversationID, nil
 }
 
-func (r *Repository) GetConversations(
-	userID int,
-) ([]Conversation, error) {
+func (r *Repository) GetConversations(userID int) ([]Conversation, error) {
 	rows, err := r.db.Query(`
 		SELECT
 			c.id,
 			u.id,
 			u.username,
 			u.avatar_url,
-			c.created_at
+			c.created_at,
+
+			COUNT(dm.id) AS unread_count,
+
+			(
+				SELECT COUNT(*)
+				FROM notifications n
+				WHERE n.user_id = ?
+				  AND n.conversation_id = c.id
+				  AND n.type = 'mention'
+				  AND n.read = 0
+			) AS mention_count
+
 		FROM direct_conversations c
+
 		JOIN direct_conversation_members m
 			ON m.conversation_id = c.id
+
 		JOIN direct_conversation_members other
 			ON other.conversation_id = c.id
 			AND other.user_id != ?
+
 		JOIN users u
 			ON u.id = other.user_id
+
+		LEFT JOIN direct_messages dm
+			ON dm.conversation_id = c.id
+			AND dm.user_id != ?
+			AND dm.id > COALESCE(
+				(
+					SELECT last_read_message_id
+					FROM direct_conversation_read_state
+					WHERE user_id = ?
+					  AND conversation_id = c.id
+				),
+				0
+			)
+
 		WHERE m.user_id = ?
+
+		GROUP BY
+			c.id,
+			u.id,
+			u.username,
+			u.avatar_url,
+			c.created_at
+
 		ORDER BY c.id DESC
-	`, userID, userID)
+	`,
+		userID,
+		userID,
+		userID,
+		userID,
+		userID,
+	)
 
 	if err != nil {
 		return nil, err
 	}
-
 	defer rows.Close()
 
 	conversations := make([]Conversation, 0)
@@ -135,14 +175,13 @@ func (r *Repository) GetConversations(
 			&conversation.Username,
 			&conversation.AvatarURL,
 			&conversation.CreatedAt,
+			&conversation.UnreadCount,
+			&conversation.MentionCount,
 		); err != nil {
 			return nil, err
 		}
 
-		conversations = append(
-			conversations,
-			conversation,
-		)
+		conversations = append(conversations, conversation)
 	}
 
 	if err := rows.Err(); err != nil {
@@ -151,7 +190,6 @@ func (r *Repository) GetConversations(
 
 	return conversations, nil
 }
-
 func (r *Repository) GetOtherUser(
 	conversationID int,
 	userID int,
@@ -334,4 +372,55 @@ func (r *Repository) CreateMessage(
 	}
 
 	return message, nil
+}
+
+func (r *Repository) MarkConversationRead(
+	conversationID int,
+	userID int,
+	messageID int,
+) error {
+	isMember, err := r.IsMember(
+		conversationID,
+		userID,
+	)
+	if err != nil {
+		return err
+	}
+
+	if !isMember {
+		return ErrConversationNotFound
+	}
+
+	_, err = r.db.Exec(`
+		INSERT INTO direct_conversation_read_state (
+			user_id,
+			conversation_id,
+			last_read_message_id
+		)
+		VALUES (?, ?, ?)
+		ON CONFLICT(user_id, conversation_id)
+		DO UPDATE SET
+			last_read_message_id = excluded.last_read_message_id,
+			updated_at = CURRENT_TIMESTAMP
+	`,
+		userID,
+		conversationID,
+		messageID,
+	)
+
+	return err
+}
+
+func (r *Repository) GetUser(
+	userID int,
+) (string, error) {
+	var username string
+
+	err := r.db.QueryRow(`
+		SELECT username
+		FROM users
+		WHERE id = ?
+	`, userID).Scan(&username)
+
+	return username, err
 }

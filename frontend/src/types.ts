@@ -91,9 +91,10 @@ export type RealtimeEvent =
       type: "mention";
       data: {
         id: number;
-        server_id: number;
-        channel_id: number;
-        message_id: number;
+        server_id: number | null;
+        channel_id: number | null;
+        conversation_id: number | null;
+        message_id: number | null;
         from_user_id: number;
       };
     }
@@ -111,6 +112,20 @@ export type RealtimeEvent =
   | {
       type: "user_updated";
       data: User;
+    }
+  | {
+  type: "notification";
+  data: {
+    id: number;
+    user_id: number;
+    type: string;
+    server_id: number | null;
+    channel_id: number | null;
+    message_id: number | null;
+    conversation_id: number | null;
+    from_user_id: number | null;
+    read: boolean;
+  };
     };
 
 
@@ -122,6 +137,7 @@ export type AppNotification = {
   server_id: number | null;
   channel_id: number | null;
   message_id: number | null;
+  conversation_id: number | null;
   from_user_id: number | null;
   read: boolean;
   created_at: string;
@@ -144,4 +160,6 @@ export type DMConversation = {
   username: string;
   avatar_url: string | null;
   created_at: string;
+  unread_count: number;
+  mention_count: number;
 };

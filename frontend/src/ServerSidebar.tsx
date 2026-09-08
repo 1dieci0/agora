@@ -11,8 +11,10 @@ type ServerSidebarProps = {
   unreadServerIds: Set<number>;
   notifications: AppNotification[];
   showDMs: boolean;
-};
 
+  hasUnreadDMs: boolean;
+  dmMentionCount: number;
+};
 
 
 function ServerSidebar({
@@ -26,6 +28,9 @@ function ServerSidebar({
   unreadServerIds,
   notifications,
   showDMs,
+
+  hasUnreadDMs,
+  dmMentionCount,
 }: ServerSidebarProps) {
   return (
     <aside className="server-sidebar">
@@ -35,12 +40,24 @@ function ServerSidebar({
         className={[
           "dm-home-button",
           showDMs ? "selected" : "",
+          hasUnreadDMs ? "has-unread" : "",
+          dmMentionCount > 0 ? "has-mention" : "",
         ]
           .filter(Boolean)
           .join(" ")}
         onClick={onOpenDMs}
       >
         @
+
+        {dmMentionCount > 0 && (
+          <span className="server-mention-badge">
+            {dmMentionCount}
+          </span>
+        )}
+
+        {hasUnreadDMs && (
+          <span className="server-unread" />
+        )}
       </button>
       <div className="server-list">
         {servers.map((server) => {

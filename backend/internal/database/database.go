@@ -132,6 +132,7 @@ func SetupDatabase(db *sql.DB) error {
 			channel_id INTEGER,
 			message_id INTEGER,
 			from_user_id INTEGER,
+			conversation_id INTEGER,
 
 			read BOOLEAN NOT NULL DEFAULT 0,
 
@@ -202,6 +203,27 @@ func SetupDatabase(db *sql.DB) error {
 
 		CREATE INDEX IF NOT EXISTS idx_direct_messages_conversation
 		ON direct_messages(conversation_id);
+
+
+		CREATE TABLE IF NOT EXISTS direct_conversation_read_state (
+			user_id INTEGER NOT NULL,
+			conversation_id INTEGER NOT NULL,
+			last_read_message_id INTEGER NOT NULL DEFAULT 0,
+			updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+			PRIMARY KEY (user_id, conversation_id),
+
+			FOREIGN KEY (user_id)
+				REFERENCES users(id)
+				ON DELETE CASCADE,
+
+			FOREIGN KEY (conversation_id)
+				REFERENCES direct_conversations(id)
+				ON DELETE CASCADE
+		);
+
+		CREATE INDEX IF NOT EXISTS idx_direct_conversation_read_state_conversation
+		ON direct_conversation_read_state(conversation_id);
 
 	`)
 

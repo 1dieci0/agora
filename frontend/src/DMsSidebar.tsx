@@ -53,6 +53,14 @@ function DMsSidebar({
               <div className="dm-conversation-name">
                 {conversation.username}
               </div>
+
+              {conversation.unread_count > 0 && (
+                <span className="dm-unread-badge">
+                  {conversation.unread_count > 99
+                    ? "99+"
+                    : conversation.unread_count}
+                </span>
+              )}
             </button>
           ))
         )}

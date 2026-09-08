@@ -23,9 +23,10 @@ type UnreadUpdate struct {
 }
 
 type MentionNotification struct {
-	ID         int `json:"id"`
-	ServerID   int `json:"server_id"`
-	ChannelID  int `json:"channel_id"`
-	MessageID  int `json:"message_id"`
-	FromUserID int `json:"from_user_id"`
+	ID             int  `json:"id"`
+	ServerID       *int `json:"server_id"`
+	ChannelID      *int `json:"channel_id"`
+	ConversationID *int `json:"conversation_id"`
+	MessageID      *int `json:"message_id"`
+	FromUserID     int  `json:"from_user_id"`
 }

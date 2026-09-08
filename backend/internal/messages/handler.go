@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"agora/internal/channels"
+	"agora/internal/mentions"
 	"agora/internal/notifications"
 	"agora/internal/realtime"
 	"agora/internal/servers"
@@ -143,7 +144,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 			err,
 		)
 	} else {
-		mentions := extractMentions(data.Content)
+		mentions := mentions.Extract(data.Content)
 
 		// ----------------------------------------
 		// Mention notifications
@@ -187,11 +188,12 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 				mentionEvent := realtime.Event{
 					Type: "mention",
 					Data: realtime.MentionNotification{
-						ID:         notificationID,
-						ServerID:   serverID,
-						ChannelID:  channelID,
-						MessageID:  int(message.ID),
-						FromUserID: userID,
+						ID:             notificationID,
+						ServerID:       &serverID,
+						ChannelID:      &channelID,
+						ConversationID: nil,
+						MessageID:      &message.ID,
+						FromUserID:     userID,
 					},
 				}
 
@@ -501,40 +503,4 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	h.hub.BroadcastServer(serverID, eventData)
 
 	w.WriteHeader(http.StatusNoContent)
-}
-
-func extractMentions(content string) []string {
-	words := strings.Fields(content)
-
-	mentions := make([]string, 0)
-	seen := make(map[string]bool)
-
-	for _, word := range words {
-		if !strings.HasPrefix(word, "@") {
-			continue
-		}
-
-		username := strings.TrimPrefix(word, "@")
-
-		// Remove punctuation commonly placed after a mention.
-		username = strings.TrimRight(
-			username,
-			".,!?;:)]}",
-		)
-
-		if username == "" {
-			continue
-		}
-
-		username = strings.ToLower(username)
-
-		if seen[username] {
-			continue
-		}
-
-		seen[username] = true
-		mentions = append(mentions, username)
-	}
-
-	return mentions
 }

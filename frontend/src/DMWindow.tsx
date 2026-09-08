@@ -18,6 +18,7 @@ type DMWindowProps = {
   conversation: DMConversation | null;
   conversationId: number | null;
   realtimeDMEvent: RealtimeEvent | null;
+  onConversationRead: (messageId: number) => Promise<void>;
 };
 
 function DMWindow({
@@ -25,6 +26,7 @@ function DMWindow({
   conversation,
   conversationId,
   realtimeDMEvent,
+  onConversationRead,
 }: DMWindowProps) {
   const [messages, setMessages] = useState<DirectMessage[]>(
     [],
@@ -56,6 +58,13 @@ function DMWindow({
         );
 
         setMessages(messages ?? []);
+
+        if (messages.length > 0) {
+          const lastMessage =
+            messages[messages.length - 1];
+
+          await onConversationRead(lastMessage.id);
+        }
       } catch (error) {
         console.error( 
           "Could not load DM messages:",
@@ -68,7 +77,7 @@ function DMWindow({
     }
 
     loadMessages();
-  }, [conversationId]);
+  }, [conversationId, onConversationRead]); 
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({
